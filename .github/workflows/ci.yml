@@ -1,3 +1,4 @@
+# CI verification branch: validates build, compose and repeatable migrations
 name: CI
 on:
   push:
