@@ -44,7 +44,15 @@ public static class OperationsEndpoints
             var ha1=Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes($"{b.Extension}:{realm}:{b.Password}"))).ToLowerInvariant();
             await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("INSERT INTO agent_endpoints(tenant_id,user_id,extension,display_name,secret_hash,sip_ha1) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,extension,display_name,status,transport",c);Add(q,Tenant(u),User(u),b.Extension,b.DisplayName,PlatformStore.Hash(b.Password),ha1);return Results.Created("/api/v1/agents",await One(q,ct));
         });
-        api.MapGet("/webrtc/{extension}",(string extension,WebRtcService rtc)=>Regex.IsMatch(extension,"^[0-9]{3,8}$")?Results.Ok(rtc.Config(extension)):Results.BadRequest(new{error="Invalid extension"}));
+        api.MapGet("/agents",async(ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
+        {
+            await using var c=await s.Open(ct);var sql=Admin(u)?"SELECT id,extension,display_name,status,transport,created_at FROM agent_endpoints WHERE tenant_id=$1 ORDER BY extension":"SELECT id,extension,display_name,status,transport,created_at FROM agent_endpoints WHERE tenant_id=$1 AND user_id=$2 ORDER BY extension";await using var q=new NpgsqlCommand(sql,c);q.Parameters.AddWithValue(Tenant(u));if(!Admin(u))q.Parameters.AddWithValue(User(u));return Results.Ok(await Rows(q,ct));
+        });
+        api.MapGet("/webrtc/{extension}",async(string extension,ClaimsPrincipal u,PlatformStore s,WebRtcService rtc,CancellationToken ct)=>
+        {
+            if(!Regex.IsMatch(extension,"^[0-9]{3,8}$"))return Results.BadRequest(new{error="Invalid extension"});
+            await using var c=await s.Open(ct);var sql=Admin(u)?"SELECT EXISTS(SELECT 1 FROM agent_endpoints WHERE tenant_id=$1 AND extension=$2)":"SELECT EXISTS(SELECT 1 FROM agent_endpoints WHERE tenant_id=$1 AND user_id=$2 AND extension=$3)";await using var q=new NpgsqlCommand(sql,c);q.Parameters.AddWithValue(Tenant(u));if(Admin(u))q.Parameters.AddWithValue(extension);else{q.Parameters.AddWithValue(User(u));q.Parameters.AddWithValue(extension);}if(!Convert.ToBoolean(await q.ExecuteScalarAsync(ct)))return Results.NotFound(new{error="Endpoint not found"});return Results.Ok(rtc.Config(extension));
+        });
         api.MapGet("/quality/scorecards",async(ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {
             await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("SELECT id,name,version,definition,status,created_at FROM quality_scorecards WHERE tenant_id=$1 ORDER BY name,version DESC",c);q.Parameters.AddWithValue(Tenant(u));return Results.Ok(await Rows(q,ct));
