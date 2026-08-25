@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ICPaaS Control Plane</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="ambient a"></div><div class="ambient b"></div>
+  <aside>
+    <div class="brand"><span class="brand-mark">I</span><div><strong data-brand>ICPaaS</strong><small>Control Plane</small></div></div>
+    <nav><button class="active">Overview</button><button>Quick Connect</button><button>Telephony Nodes</button><button>Campaigns</button><button>Live Calls</button><button>Quality</button><button>Integrations</button><button>Tenant Design</button></nav>
+    <div class="tenant"><span class="dot"></span><div><small>Active tenant</small><strong>Workspace preview</strong></div></div>
+  </aside>
+  <main>
+    <header><div><p class="eyebrow">VERSATILE COMMUNICATIONS PLATFORM</p><h1>Infrastructure that adapts to you.</h1><p class="subtitle">Connect a SIP server, run bundled services, or distribute every component—without changing the product.</p></div><button class="primary">Quick connect <span>→</span></button></header>
+    <section class="hero-card"><div><span class="status"><i></i> Control plane online</span><h2>One panel. Every calling topology.</h2><p>FreeSWITCH, Asterisk, generic SIP and external providers share one normalized call lifecycle.</p></div><div class="orb"><div class="ring r1"></div><div class="ring r2"></div><strong>READY</strong></div></section>
+    <section class="metrics"><article><small>Deployment</small><strong id="profile">Detecting…</strong><span>Runtime profile</span></article><article><small>Telephony engines</small><strong id="engines">—</strong><span>Detected adapters</span></article><article><small>Database</small><strong id="database">—</strong><span>Portable storage</span></article><article><small>Media edge</small><strong id="media">—</strong><span>TURN / RTPEngine</span></article></section>
+    <section class="grid"><article class="panel"><div class="panel-title"><div><small>ENGINE MATRIX</small><h3>Telephony readiness</h3></div><button class="ghost" id="refresh">Refresh</button></div><div id="engine-list" class="engine-list"><div class="skeleton"></div><div class="skeleton"></div></div></article><article class="panel connect"><small>QUICK CONNECT</small><h3>Start with the server you already have.</h3><p>Add an IP or domain, select authentication, create a trunk and bind a route. Advanced management stays optional.</p><button class="secondary">Configure SIP server</button><div class="flow"><span>Server</span><b>→</b><span>Trunk</span><b>→</b><span>Route</span><b>→</b><span>Call</span></div></article></section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

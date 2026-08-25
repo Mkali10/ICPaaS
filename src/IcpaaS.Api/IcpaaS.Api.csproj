@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="../IcpaaS.Core/IcpaaS.Core.csproj" />
+    <ProjectReference Include="../IcpaaS.Telephony/IcpaaS.Telephony.csproj" />
+  </ItemGroup>
+</Project>

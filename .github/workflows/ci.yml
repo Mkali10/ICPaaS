@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ICPaaS.sln
+      - run: dotnet build ICPaaS.sln -c Release --no-restore
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml config --quiet

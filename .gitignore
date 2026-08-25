@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.env
+*.user
+*.suo
+.idea/
+.vscode/
+data/
+secrets/
+certs/
+logs/

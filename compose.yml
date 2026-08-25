@@ -1,0 +1,36 @@
+name: icpaas
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/IcpaaS.Api/Dockerfile
+    env_file: [.env]
+    ports: ["${ICPaaS_API_BIND:-127.0.0.1}:${ICPaaS_API_PORT:-18080}:8080"]
+    restart: unless-stopped
+    profiles: ["standalone", "application", "distributed"]
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-icpaas}
+      POSTGRES_USER: ${POSTGRES_USER:-icpaas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-icpaas} -d ${POSTGRES_DB:-icpaas}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    profiles: ["standalone"]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    restart: unless-stopped
+    profiles: ["standalone", "distributed"]
+  coturn:
+    image: coturn/coturn:alpine
+    command: ["-n", "--log-file=stdout", "--use-auth-secret", "--static-auth-secret=${TURN_SHARED_SECRET:?set TURN_SHARED_SECRET}", "--realm=${TURN_REALM:?set TURN_REALM}", "--fingerprint", "--no-cli"]
+    restart: unless-stopped
+    profiles: ["media-bundled"]
+volumes:
+  postgres_data:
