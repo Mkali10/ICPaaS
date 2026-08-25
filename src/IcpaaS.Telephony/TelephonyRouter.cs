@@ -17,7 +17,7 @@ public sealed class TelephonyRouter
         _defaultEngine = options.Value.Telephony.DefaultEngine;
     }
 
-    public IReadOnlyCollection<ITelephonyEngine> Engines => _engines.Values;
+    public IReadOnlyCollection<ITelephonyEngine> Engines => _engines.Values.ToArray();
 
     public async Task<OriginateResult> OriginateAsync(CallRequest request, CancellationToken cancellationToken)
     {

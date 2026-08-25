@@ -28,10 +28,10 @@ public sealed class SimulatorEngine : ITelephonyEngine
 
     public Task AnswerAsync(CallRef call, CancellationToken cancellationToken) => Publish(call, "call.answered", cancellationToken).AsTask();
     public Task BridgeAsync(CallRef first, CallRef second, CancellationToken cancellationToken) => Publish(first, "call.bridged", cancellationToken).AsTask();
-    public Task TransferAsync(CallRef call, TransferRequest request, CancellationToken cancellationToken) => Publish(call, "call.transferred", cancellationToken, new() { ["destination"] = request.Destination }).AsTask();
+    public Task TransferAsync(CallRef call, TransferRequest request, CancellationToken cancellationToken) => Publish(call, "call.transferred", cancellationToken, new Dictionary<string, string> { ["destination"] = request.Destination }).AsTask();
     public Task HoldAsync(CallRef call, bool enabled, CancellationToken cancellationToken) => Publish(call, enabled ? "call.held" : "call.resumed", cancellationToken).AsTask();
-    public Task SendDtmfAsync(CallRef call, string digits, CancellationToken cancellationToken) => Publish(call, "call.dtmf", cancellationToken, new() { ["digits"] = digits }).AsTask();
-    public async Task HangupAsync(CallRef call, string reason, CancellationToken cancellationToken) { _calls.TryRemove(call.PlatformCallId, out _); await Publish(call, "call.hangup", cancellationToken, new() { ["reason"] = reason }); }
+    public Task SendDtmfAsync(CallRef call, string digits, CancellationToken cancellationToken) => Publish(call, "call.dtmf", cancellationToken, new Dictionary<string, string> { ["digits"] = digits }).AsTask();
+    public async Task HangupAsync(CallRef call, string reason, CancellationToken cancellationToken) { _calls.TryRemove(call.PlatformCallId, out _); await Publish(call, "call.hangup", cancellationToken, new Dictionary<string, string> { ["reason"] = reason }); }
 
     public async IAsyncEnumerable<TelephonyEvent> SubscribeAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
