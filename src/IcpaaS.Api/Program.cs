@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using IcpaaS.Core.Configuration;
 using IcpaaS.Core.Telephony;
 using IcpaaS.Telephony;
@@ -11,6 +12,7 @@ builder.Services.AddOptions<PlatformOptions>()
 builder.Services.AddIcpaaSTelephony();
 builder.Services.AddSingleton<CapabilityService>();
 builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
 app.UseExceptionHandler();
