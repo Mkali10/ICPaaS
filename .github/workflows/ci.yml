@@ -31,6 +31,9 @@ jobs:
         run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml logs postgres
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
-      - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml exec -T postgres psql -p 55432 -U icpaas -d icpaas -Atc "SELECT count(*) FROM schema_migrations" | grep '^2$'
+      - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml exec -T postgres psql -p 55432 -U icpaas -d icpaas -Atc "SELECT count(*) FROM schema_migrations" | grep '^3
+      - if: always()
+        run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone down -v
+
       - if: always()
         run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone down -v

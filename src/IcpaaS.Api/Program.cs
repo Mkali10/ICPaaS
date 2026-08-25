@@ -18,6 +18,8 @@ builder.Services.AddSingleton<CapabilityService>();
 builder.Services.AddSingleton<PlatformStore>();builder.Services.AddSingleton<AuthService>();builder.Services.AddSingleton<WebRtcService>();
 builder.Services.AddSingleton<CapacityService>();
 builder.Services.AddHostedService<ProvisioningWorker>();
+builder.Services.AddHttpClient("plugins",client=>client.Timeout=TimeSpan.FromSeconds(15));
+builder.Services.AddHostedService<PluginDeliveryWorker>();
 var jwtSecret=builder.Configuration["ICPaaS:Security:JwtSecret"]??throw new InvalidOperationException("ICPaaS:Security:JwtSecret is required");if(jwtSecret.Length<32)throw new InvalidOperationException("JWT secret must be at least 32 characters");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>o.TokenValidationParameters=new(){ValidateIssuer=true,ValidIssuer="icpaas",ValidateAudience=true,ValidAudience="icpaas-api",ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),ValidateLifetime=true,ClockSkew=TimeSpan.FromSeconds(30)});builder.Services.AddAuthorization();
 builder.Services.AddProblemDetails();
@@ -43,7 +45,7 @@ app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, Telephon
 app.MapPost("/api/v1/auth/bootstrap",async(BootstrapRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Bootstrap(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct)));
 app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Login(b,ct)));
 app.MapPost("/api/v1/auth/refresh",async(RefreshRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Refresh(b,ct)));
-app.MapManagement();app.MapOperations();app.MapUsers();app.MapNodeEndpoints();app.MapProvisioning();
+app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapNodeEndpoints();app.MapProvisioning();
 
 app.MapFallbackToFile("index.html");
 app.Run();
