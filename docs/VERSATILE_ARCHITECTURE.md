@@ -218,6 +218,136 @@ failover_group
 
 An active call is never moved between engines. Failover applies to new call attempts or to a controlled retry before answer.
 
+## 8. Quick Connect / Plug-and-Call SIP mode
+
+ICPaaS must support operators who already have a SIP server and want to start calling without adopting the complete managed-node architecture.
+
+### 8.1 Goal
+
+The operator should be able to:
+
+1. Enter a SIP server IP address or domain.
+2. Select or auto-detect FreeSWITCH, Asterisk, generic SIP or external provider mode.
+3. Choose IP-authentication or username/password authentication.
+4. Create a trunk.
+5. Create inbound and outbound routes.
+6. Assign a DID/CLI.
+7. Bind the route to a tenant, process, queue, flow or campaign.
+8. Set CPS at campaign/process level.
+9. Run a test call and activate the connection.
+
+ICPaaS must not require its own fixed public IP or domain in source code. The installer/operator supplies the reachable signaling, control, webhook and media endpoints for that deployment.
+
+### 8.2 Connection levels
+
+| Connection level | Required access | Available capability |
+|---|---|---|
+| Generic SIP | SIP IP/domain and trunk authentication | Standard inbound/outbound calling |
+| Managed FreeSWITCH | SIP plus ESL and optional dynamic configuration API | Full call control, live events and provisioning |
+| Managed Asterisk | SIP plus ARI/AMI and optional realtime/node agent | Full call control, queues, events and provisioning |
+| Node Agent | Signed agent registration | Remote configuration, validation, reload and diagnostics |
+| External CPaaS | Provider API/webhook credentials | Provider-controlled calling and events |
+| Simulator | No SIP dependency | UI, workflow and training tests |
+
+Failure to obtain advanced management access must not prevent generic SIP operation when the server accepts a standard trunk. The UI clearly displays which advanced capabilities are unavailable.
+
+### 8.3 Quick Connect wizard
+
+The panel provides a guided wizard:
+
+- Server name
+- Engine type or automatic detection
+- SIP address and port
+- Transport: UDP, TCP, TLS or WSS where supported
+- Authentication: IP-based, REGISTER or provider API
+- Optional ESL, ARI, AMI or node-agent connection
+- Codec policy
+- RTP/NAT mode
+- Inbound number format
+- Default outbound CLI
+- Maximum provider channels
+- Campaign/process CPS
+- Primary and failover routes
+- Test number
+
+The wizard runs non-destructive checks and produces a readiness result:
+
+```text
+SIP signaling       ready | failed | unverified
+Control connection  ESL | ARI/AMI | node-agent | unavailable
+Inbound route       ready | incomplete
+Outbound route      ready | incomplete
+Media/RTP           passed | failed | not tested
+CLI authorization   confirmed | operator confirmation required
+Effective CPS       <calculated value>
+Available channels  <reported or configured value>
+```
+
+Automatic engine detection is advisory. It must never send privileged or disruptive commands to an unknown server.
+
+### 8.4 Route model
+
+Inbound:
+
+```text
+Trunk + DID -> Tenant -> Process -> Published Flow -> Queue/Agent/AI
+```
+
+Outbound:
+
+```text
+Tenant + Campaign/Process + Destination Policy -> CLI/DID -> Primary Trunk -> Failover Trunk
+```
+
+The same DID may be used only according to verified tenant ownership and provider policy. Route changes are versioned, validated and auditable.
+
+### 8.5 CPS and channel enforcement
+
+CPS is configurable where the operator naturally manages work:
+
+- Campaign
+- Process
+- Tenant
+- Trunk
+- Provider
+- Telephony node
+
+Effective CPS is the minimum applicable active limit:
+
+```text
+effective_cps = min(campaign, process, tenant, trunk, provider, node capacity)
+```
+
+Channel limits are enforced independently from CPS. Distributed workers must use shared leases/counters so multiple application instances cannot collectively exceed a configured limit.
+
+### 8.6 Configuration ownership modes
+
+Each connection declares one configuration-ownership mode:
+
+- **ICPaaS-managed:** ICPaaS provisions trunks/routes through the node agent or supported PBX API.
+- **Shared:** ICPaaS controls calls but the operator manages some PBX configuration.
+- **External/unmanaged:** the operator configures the remote SIP server; ICPaaS stores matching logical routes and validates connectivity.
+- **Provider-managed:** a CPaaS/provider owns the SIP/media configuration.
+
+ICPaaS must never overwrite externally owned configuration. Managed changes require a preview, validation, atomic apply, revision record and rollback path.
+
+### 8.7 Universal-operation rule
+
+Quick Connect is an additional operating mode, not a replacement for distributed deployment. The same product must support:
+
+- One server or many servers
+- Bundled or external database
+- FreeSWITCH only
+- Asterisk only
+- FreeSWITCH and Asterisk together
+- Generic third-party SIP server
+- External CPaaS/provider
+- Bundled or external CoTURN/RTPEngine
+- Managed or operator-managed PBX configuration
+- Human-agent, AI-agent and blended calls
+
+Unsupported capabilities must be reported explicitly. The platform must degrade by capability and must not pretend an unverified connection is production-ready.
+
 ## 8. Node agent and distributed topology
 
 Each SIP/media server runs a lightweight authenticated node agent. The control plane must not require direct shell access.
