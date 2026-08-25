@@ -11,6 +11,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<FreeSwitchEslConnection>();
         services.AddHostedService(sp => sp.GetRequiredService<FreeSwitchEslConnection>());
         services.AddSingleton<FreeSwitchEngine>();
+        services.AddSingleton<AsteriskAriEventConnection>();
+        services.AddHostedService(sp => sp.GetRequiredService<AsteriskAriEventConnection>());
         services.AddSingleton<AsteriskEngine>();
         services.AddSingleton<GenericSipEngine>();
         services.AddSingleton<ITelephonyEngine>(sp => sp.GetRequiredService<SimulatorEngine>());
