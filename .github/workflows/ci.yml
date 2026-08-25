@@ -1,4 +1,3 @@
-# CI verification branch: validates build, compose and repeatable migrations
 name: CI
 on:
   push:
@@ -29,7 +28,6 @@ jobs:
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone up -d --wait postgres
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
-      - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml exec -T postgres psql -U icpaas -d icpaas -Atc "SELECT count(*) FROM schema_migrations" | grep '^2$'
+      - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml exec -T postgres psql -p 55432 -U icpaas -d icpaas -Atc "SELECT count(*) FROM schema_migrations" | grep '^2$'
       - if: always()
         run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone down -v
-
