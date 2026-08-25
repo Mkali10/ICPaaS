@@ -15,7 +15,7 @@ services:
         required: false
     profiles: ["standalone", "application", "distributed"]
   postgres:
-    image: postgres:18.6-alpine
+    image: postgres:17-alpine
     command: ["postgres", "-p", "${POSTGRES_PORT:-55432}"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-icpaas}
@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     profiles: ["standalone"]
   migrate:
-    image: postgres:18.6-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-icpaas}
       POSTGRES_USER: ${POSTGRES_USER:-icpaas}
