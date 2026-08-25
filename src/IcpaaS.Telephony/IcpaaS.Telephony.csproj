@@ -2,3 +2,4 @@
   <ItemGroup><ProjectReference Include="../IcpaaS.Core/IcpaaS.Core.csproj" /></ItemGroup>
   <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
 </Project>
+

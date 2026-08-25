@@ -1,8 +1,12 @@
 using System.Text.Json.Serialization;
+using System.Text;
+using IcpaaS.Api;
 using IcpaaS.Core.Configuration;
 using IcpaaS.Core.Telephony;
 using IcpaaS.Telephony;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOptions<PlatformOptions>()
@@ -11,6 +15,11 @@ builder.Services.AddOptions<PlatformOptions>()
     .ValidateOnStart();
 builder.Services.AddIcpaaSTelephony();
 builder.Services.AddSingleton<CapabilityService>();
+builder.Services.AddSingleton<PlatformStore>();builder.Services.AddSingleton<AuthService>();builder.Services.AddSingleton<WebRtcService>();
+builder.Services.AddSingleton<CapacityService>();
+builder.Services.AddHostedService<ProvisioningWorker>();
+var jwtSecret=builder.Configuration["ICPaaS:Security:JwtSecret"]??throw new InvalidOperationException("ICPaaS:Security:JwtSecret is required");if(jwtSecret.Length<32)throw new InvalidOperationException("JWT secret must be at least 32 characters");
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>o.TokenValidationParameters=new(){ValidateIssuer=true,ValidIssuer="icpaas",ValidateAudience=true,ValidAudience="icpaas-api",ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),ValidateLifetime=true,ClockSkew=TimeSpan.FromSeconds(30)});builder.Services.AddAuthorization();
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -18,6 +27,7 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseAuthentication();app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "live", time = DateTimeOffset.UtcNow }));
 app.MapGet("/health/ready", async (CapabilityService service, CancellationToken ct) => Results.Ok(await service.ReadAsync(ct)));
@@ -28,7 +38,12 @@ app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, Telephon
 {
     var request = new CallRequest(Guid.NewGuid(), body.TenantId, body.Destination, body.CallerId, null, "quick-connect-test", body.EngineKey, body.TrunkKey, 1);
     return Results.Accepted(value: await router.OriginateAsync(request, ct));
-});
+}).RequireAuthorization();
+
+app.MapPost("/api/v1/auth/bootstrap",async(BootstrapRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Bootstrap(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct)));
+app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Login(b,ct)));
+app.MapPost("/api/v1/auth/refresh",async(RefreshRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Refresh(b,ct)));
+app.MapManagement();app.MapOperations();app.MapUsers();app.MapNodeEndpoints();app.MapProvisioning();
 
 app.MapFallbackToFile("index.html");
 app.Run();

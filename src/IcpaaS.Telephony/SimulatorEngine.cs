@@ -41,3 +41,4 @@ public sealed class SimulatorEngine : ITelephonyEngine
     private ValueTask Publish(CallRef call, string eventType, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? attributes = null)
         => _events.Writer.WriteAsync(new TelephonyEvent(call.PlatformCallId, EngineKey, eventType, DateTimeOffset.UtcNow, attributes ?? new Dictionary<string, string>()), cancellationToken);
 }
+

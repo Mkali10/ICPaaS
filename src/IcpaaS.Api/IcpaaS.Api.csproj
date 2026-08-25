@@ -2,5 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="../IcpaaS.Core/IcpaaS.Core.csproj" />
     <ProjectReference Include="../IcpaaS.Telephony/IcpaaS.Telephony.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.8" />
+    <PackageReference Include="Npgsql" Version="8.0.4" />
   </ItemGroup>
 </Project>

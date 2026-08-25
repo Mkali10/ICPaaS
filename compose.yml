@@ -5,8 +5,14 @@ services:
       context: .
       dockerfile: src/IcpaaS.Api/Dockerfile
     env_file: [.env]
+    environment:
+      ICPaaS__Database__ConnectionString: ${ICPaaS_DATABASE_CONNECTION_STRING:-Host=postgres;Port=5432;Database=${POSTGRES_DB:-icpaas};Username=${POSTGRES_USER:-icpaas};Password=${POSTGRES_PASSWORD}}
     ports: ["${ICPaaS_API_BIND:-127.0.0.1}:${ICPaaS_API_PORT:-18080}:8080"]
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+        required: false
     profiles: ["standalone", "application", "distributed"]
   postgres:
     image: postgres:17-alpine

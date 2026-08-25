@@ -38,6 +38,9 @@ public sealed class EngineOptions
     public string? AriBaseUrl { get; init; }
     public string? AriUsername { get; init; }
     public string? AriPassword { get; init; }
+    public string? AriApp { get; init; } = "icpaas";
+    public string? ControlWebhook { get; init; }
+    public string? ApiToken { get; init; }
 }
 
 public sealed class MediaOptions
@@ -45,6 +48,8 @@ public sealed class MediaOptions
     public string Mode { get; init; } = "auto";
     public bool AllowBundledTurn { get; init; } = true;
     public bool AllowBundledRtpEngine { get; init; } = true;
+    public string? TurnRealm { get; init; }
+    public string? TurnSharedSecret { get; init; }
 }
 
 public sealed class PublicEndpointOptions

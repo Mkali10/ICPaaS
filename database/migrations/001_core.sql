@@ -238,3 +238,4 @@ CREATE INDEX trunks_tenant_status_idx ON trunks(tenant_id,status,enabled);
 
 INSERT INTO schema_migrations(version) VALUES('001_core.sql') ON CONFLICT DO NOTHING;
 COMMIT;
+

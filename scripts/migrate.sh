@@ -11,3 +11,4 @@ for migration in /migrations/*.sql; do
     psql -v ON_ERROR_STOP=1 -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$migration"
   fi
 done
+

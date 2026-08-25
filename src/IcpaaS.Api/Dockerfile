@@ -8,3 +8,4 @@ COPY --from=build /out .
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet","IcpaaS.Api.dll"]
+
