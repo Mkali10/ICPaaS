@@ -8,6 +8,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddIcpaaSTelephony(this IServiceCollection services)
     {
         services.AddSingleton<SimulatorEngine>();
+        services.AddSingleton<FreeSwitchEslConnection>();
+        services.AddHostedService(sp => sp.GetRequiredService<FreeSwitchEslConnection>());
         services.AddSingleton<FreeSwitchEngine>();
         services.AddSingleton<AsteriskEngine>();
         services.AddSingleton<GenericSipEngine>();
@@ -19,4 +21,3 @@ public static class ServiceCollectionExtensions
         return services;
     }
 }
-
