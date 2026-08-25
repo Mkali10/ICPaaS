@@ -1,3 +1,4 @@
+# Verifies PostgreSQL 17 and non-default deployment ports
 name: CI
 on:
   push:
