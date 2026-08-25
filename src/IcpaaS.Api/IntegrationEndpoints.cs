@@ -7,6 +7,7 @@ namespace IcpaaS.Api;
 
 public sealed record PluginConfigure(string PluginKey,string DisplayName,string EndpointUrl,string? SecretRef,string[] Events,JsonElement Settings);
 public sealed record QualityNoteCreate(string NoteType,string Body);
+public sealed record QualityStateChange(string State);
 
 public static class IntegrationEndpoints
 {
@@ -50,6 +51,24 @@ RETURNING id,plugin_key,display_name,status,endpoint_url,secret_ref,subscribed_e
             await using var connection=await store.Open(ct);
             await using var command=new NpgsqlCommand("SELECT d.id,p.display_name,d.event_type,d.state,d.attempts,d.response_code,d.last_error,d.delivered_at,d.created_at FROM plugin_deliveries d JOIN plugins p ON p.id=d.plugin_id WHERE d.tenant_id=$1 ORDER BY d.created_at DESC LIMIT 200",connection);
             command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
+        });
+        group.MapGet("/quality/evaluations",async(ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
+        {
+            await using var connection=await store.Open(ct);
+            await using var command=new NpgsqlCommand(@"SELECT e.id,e.call_id,e.scorecard_id,s.name scorecard_name,s.version,e.reviewer_user_id,u.display_name reviewer_name,e.state,e.score,e.result,e.created_at,e.updated_at
+FROM quality_evaluations e JOIN quality_scorecards s ON s.id=e.scorecard_id JOIN users u ON u.id=e.reviewer_user_id WHERE e.tenant_id=$1 ORDER BY e.created_at DESC LIMIT 300",connection);
+            command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
+        });
+        group.MapGet("/quality/evaluations/{id:guid}/notes",async(Guid id,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
+        {
+            await using var connection=await store.Open(ct);
+            await using var command=new NpgsqlCommand(@"SELECT n.id,n.note_type,n.body,u.display_name author_name,n.created_at FROM quality_evaluation_notes n JOIN users u ON u.id=n.author_user_id WHERE n.tenant_id=$1 AND n.evaluation_id=$2 ORDER BY n.created_at",connection);
+            Add(command,Tenant(user),id);return Results.Ok(await Rows(command,ct));
+        });
+        group.MapPost("/quality/evaluations/{id:guid}/state",async(Guid id,QualityStateChange body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
+        {
+            if(!Admin(user)||!Regex.IsMatch(body.State??"","^(draft|submitted|disputed|final)$"))return Results.BadRequest(new{error="Invalid evaluation state"});
+            await using var connection=await store.Open(ct);await using var command=new NpgsqlCommand("UPDATE quality_evaluations SET state=$3,updated_at=now() WHERE id=$2 AND tenant_id=$1 RETURNING id,state,updated_at",connection);Add(command,Tenant(user),id,body.State);return await One(command,ct) is { } row?Results.Ok(row):Results.NotFound();
         });
         group.MapPost("/quality/evaluations/{id:guid}/notes",async(Guid id,QualityNoteCreate body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
