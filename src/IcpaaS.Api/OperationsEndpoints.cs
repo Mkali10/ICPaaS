@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using Npgsql;
 
 namespace IcpaaS.Api;
-public sealed record AgentEndpointCreate(string Extension,string DisplayName,string Password);
+public sealed record AgentEndpointCreate(Guid? UserId,string Extension,string DisplayName,string Password);
 public sealed record ScorecardCreate(string Name,int Version,JsonElement Definition);
 public sealed record EvaluationCreate(Guid CallId,Guid ScorecardId,decimal? Score,JsonElement Result);
 public sealed record NodeHeartbeat(string NodeKey,string Status,int ActiveChannels,decimal CurrentCps);
@@ -39,10 +39,11 @@ public static class OperationsEndpoints
         });
         api.MapPost("/agents",async(AgentEndpointCreate b,ClaimsPrincipal u,PlatformStore s,IConfiguration cfg,CancellationToken ct)=>
         {
-            if(!Admin(u)||!Regex.IsMatch(b.Extension,"^[0-9]{3,8}$"))return Results.BadRequest(new{error="Invalid agent"});
+            if(!Admin(u)||!Regex.IsMatch(b.Extension,"^[0-9]{3,8}$")||b.Password.Length<10)return Results.BadRequest(new{error="Select an agent and provide a valid extension/password"});
             var realm=cfg["ICPaaS:Media:TurnRealm"]??throw new InvalidOperationException("SIP realm missing");
             var ha1=Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes($"{b.Extension}:{realm}:{b.Password}"))).ToLowerInvariant();
-            await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("INSERT INTO agent_endpoints(tenant_id,user_id,extension,display_name,secret_hash,sip_ha1) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,extension,display_name,status,transport",c);Add(q,Tenant(u),User(u),b.Extension,b.DisplayName,PlatformStore.Hash(b.Password),ha1);return Results.Created("/api/v1/agents",await One(q,ct));
+            var target=b.UserId??User(u);
+            await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("INSERT INTO agent_endpoints(tenant_id,user_id,extension,display_name,secret_hash,sip_ha1) SELECT $1,u.id,$3,$4,$5,$6 FROM users u WHERE u.id=$2 AND u.tenant_id=$1 AND 'agent'=ANY(u.roles) AND u.status='active' RETURNING id,extension,display_name,status,transport,user_id",c);Add(q,Tenant(u),target,b.Extension,b.DisplayName,PlatformStore.Hash(b.Password),ha1);var row=await One(q,ct);return row is null?Results.BadRequest(new{error="Selected user is not an active agent in this workspace"}):Results.Created("/api/v1/agents",row);
         });
         api.MapGet("/agents",async(ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {
