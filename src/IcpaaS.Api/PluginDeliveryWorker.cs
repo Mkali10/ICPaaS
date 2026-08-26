@@ -25,7 +25,7 @@ public sealed class PluginDeliveryWorker(PlatformStore store,IConfiguration conf
 FROM plugin_deliveries d JOIN plugins p ON p.id=d.plugin_id
 WHERE d.state IN('queued','failed') AND d.available_at<=now() AND p.status<>'revoked'
 ORDER BY d.created_at FOR UPDATE OF d SKIP LOCKED LIMIT 1",connection,transaction);
-        await using var reader=await pick.ExecuteReaderAsync(ct);if(!await reader.ReadAsync(ct)){await transaction.RollbackAsync(ct);return false;}
+        await using var reader=await pick.ExecuteReaderAsync(ct);if(!await reader.ReadAsync(ct)){await reader.CloseAsync();await transaction.RollbackAsync(ct);return false;}
         var id=reader.GetGuid(0);var pluginId=reader.GetGuid(1);var eventType=reader.GetString(2);var payload=reader.GetString(3);var endpoint=reader.IsDBNull(4)?null:reader.GetString(4);var secretRef=reader.IsDBNull(5)?null:reader.GetString(5);await reader.CloseAsync();
         await using(var claim=new NpgsqlCommand("UPDATE plugin_deliveries SET state='processing',attempts=attempts+1,updated_at=now() WHERE id=$1",connection,transaction)){claim.Parameters.AddWithValue(id);await claim.ExecuteNonQueryAsync(ct);}await transaction.CommitAsync(ct);
         try

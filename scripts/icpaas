@@ -51,7 +51,11 @@ doctor(){
   bind=$(value ICPaaS_API_BIND); [ -n "$bind" ] || bind=127.0.0.1
   [ "$bind" != 0.0.0.0 ] || bind=127.0.0.1
   dc ps; need curl
-  curl -fsS "http://$bind:$port/health/live" >/dev/null || die 'liveness check failed'
+  attempts=0
+  until curl -fsS "http://$bind:$port/health/live" >/dev/null 2>&1; do
+    attempts=$((attempts+1)); [ "$attempts" -lt 30 ] || die 'liveness check failed after 60 seconds'
+    sleep 2
+  done
   curl -fsS "http://$bind:$port/health/ready" >/dev/null || die 'readiness check failed'
   say "API live and ready on configured bind/port"
 }
