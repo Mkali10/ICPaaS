@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 2 * 1024 * 1024);
@@ -57,8 +58,9 @@ app.MapGet("/health/ready", async (CapabilityService service, CancellationToken 
 app.MapGet("/api/v1/system/capabilities", async (CapabilityService service, CancellationToken ct) => Results.Ok(await service.ReadAsync(ct)));
 app.MapGet("/api/v1/telephony/engines", async (TelephonyRouter router, CancellationToken ct) =>
     Results.Ok(await Task.WhenAll(router.Engines.Select(x => x.ProbeAsync(ct)))));
-app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, ManagedTelephonyService managed, CancellationToken ct) =>
+app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, ClaimsPrincipal user, ManagedTelephonyService managed, CancellationToken ct) =>
 {
+    if(!user.IsInRole("platform_admin")&&user.FindFirstValue("tenant_id")!=body.TenantId.ToString())return Results.Forbid();
     var request = new CallRequest(Guid.NewGuid(), body.TenantId, body.Destination, body.CallerId, null, "quick-connect-test", body.EngineKey, body.TrunkKey, 1);
     return Results.Accepted(value: (await managed.Originate(request, ct)).Result);
 }).RequireAuthorization();
@@ -70,7 +72,7 @@ app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,Cancellat
 }).RequireRateLimiting("auth");
 app.MapPost("/api/v1/auth/refresh",async(RefreshRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Refresh(b,ct)));
 app.MapPost("/api/v1/auth/recover-platform-admin",async(AdminRecoveryRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>{await auth.ResetPlatformAdmin(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct);return Results.NoContent();}).RequireRateLimiting("auth");
-app.MapContactCenter();app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapReseller();app.MapNodeEndpoints();app.MapProvisioning();
+app.MapContactCenter();app.MapInfrastructureAdmin();app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapReseller();app.MapNodeEndpoints();app.MapProvisioning();
 
 app.MapFallbackToFile("index.html");
 app.Run();
