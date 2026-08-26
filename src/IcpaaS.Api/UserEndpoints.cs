@@ -10,6 +10,7 @@ public sealed record UserUpdate(string? DisplayName, string? Status, string[]? R
 public sealed record LogoutRequest(string RefreshToken);
 public sealed record ProfileUpdate(string? DisplayName);
 public sealed record PasswordChange(string CurrentPassword,string NewPassword);
+public sealed record AdminPasswordReset(string NewPassword,bool RevokeSessions = true);
 
 public static class UserEndpoints
 {
@@ -68,6 +69,16 @@ public static class UserEndpoints
                 revoke.Parameters.AddWithValue(id);
                 await revoke.ExecuteNonQueryAsync(ct);
             }
+            return Results.Ok(result);
+        });
+        api.MapPost("/users/{id:guid}/reset-password", async (Guid id, AdminPasswordReset body, ClaimsPrincipal user, PlatformStore store, CancellationToken ct) =>
+        {
+            if (!Admin(user)) return Results.Forbid();
+            if (body.NewPassword.Length < 12) return Results.BadRequest(new { error = "Password must be at least 12 characters" });
+            var salt=PlatformStore.Salt();await using var connection=await store.Open(ct);
+            await using var command=new NpgsqlCommand("UPDATE users SET password_hash=$3,password_salt=$4,token_version=token_version+1,updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING id,email,display_name,status",connection);
+            Add(command,id,Tenant(user),PlatformStore.Password(body.NewPassword,salt),salt);var result=await One(command,ct);if(result is null)return Results.NotFound();
+            if(body.RevokeSessions){await using var revoke=new NpgsqlCommand("UPDATE refresh_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE user_id=$1",connection);revoke.Parameters.AddWithValue(id);await revoke.ExecuteNonQueryAsync(ct);}
             return Results.Ok(result);
         });
         api.MapPost("/auth/logout", async (LogoutRequest body, PlatformStore store, CancellationToken ct) =>

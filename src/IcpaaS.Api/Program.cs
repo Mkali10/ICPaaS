@@ -63,7 +63,10 @@ app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, Telephon
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/bootstrap",async(BootstrapRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Bootstrap(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct))).RequireRateLimiting("auth");
-app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Login(b,ct))).RequireRateLimiting("auth");
+app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,CancellationToken ct)=>{
+ try{return Results.Ok(await auth.Login(b,ct));}
+ catch(UnauthorizedAccessException ex){return Results.Json(new{error=ex.Message},statusCode:StatusCodes.Status401Unauthorized);}
+}).RequireRateLimiting("auth");
 app.MapPost("/api/v1/auth/refresh",async(RefreshRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Refresh(b,ct)));
 app.MapPost("/api/v1/auth/recover-platform-admin",async(AdminRecoveryRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>{await auth.ResetPlatformAdmin(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct);return Results.NoContent();}).RequireRateLimiting("auth");
 app.MapContactCenter();app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapReseller();app.MapNodeEndpoints();app.MapProvisioning();
