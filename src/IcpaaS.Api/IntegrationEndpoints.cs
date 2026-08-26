@@ -22,8 +22,8 @@ public static class IntegrationEndpoints
         group.MapGet("/plugins",async(ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
             await using var connection=await store.Open(ct);
-            await using var command=new NpgsqlCommand("SELECT id,plugin_key,category,display_name,endpoint_url,secret_ref,settings,subscribed_events,status,last_tested_at,last_error,created_at,updated_at FROM plugins WHERE tenant_id=$1 ORDER BY display_name",connection);
-            command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
+            var platform=user.IsInRole("platform_admin");var sql=platform?"SELECT id,tenant_id,plugin_key,category,display_name,endpoint_url,secret_ref,settings,subscribed_events,status,last_tested_at,last_error,created_at,updated_at FROM plugins ORDER BY display_name":"SELECT id,tenant_id,plugin_key,category,display_name,endpoint_url,secret_ref,settings,subscribed_events,status,last_tested_at,last_error,created_at,updated_at FROM plugins WHERE tenant_id=$1 ORDER BY display_name";await using var command=new NpgsqlCommand(sql,connection);
+            if(!platform)command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
         });
         group.MapPost("/plugins",async(PluginConfigure body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
@@ -49,15 +49,14 @@ RETURNING id,plugin_key,display_name,status,endpoint_url,secret_ref,subscribed_e
         group.MapGet("/plugins/deliveries",async(ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
             await using var connection=await store.Open(ct);
-            await using var command=new NpgsqlCommand("SELECT d.id,p.display_name,d.event_type,d.state,d.attempts,d.response_code,d.last_error,d.delivered_at,d.created_at FROM plugin_deliveries d JOIN plugins p ON p.id=d.plugin_id WHERE d.tenant_id=$1 ORDER BY d.created_at DESC LIMIT 200",connection);
-            command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
+            var platform=user.IsInRole("platform_admin");var sql=platform?"SELECT d.id,d.tenant_id,p.display_name,d.event_type,d.state,d.attempts,d.response_code,d.last_error,d.delivered_at,d.created_at FROM plugin_deliveries d JOIN plugins p ON p.id=d.plugin_id ORDER BY d.created_at DESC LIMIT 200":"SELECT d.id,d.tenant_id,p.display_name,d.event_type,d.state,d.attempts,d.response_code,d.last_error,d.delivered_at,d.created_at FROM plugin_deliveries d JOIN plugins p ON p.id=d.plugin_id WHERE d.tenant_id=$1 ORDER BY d.created_at DESC LIMIT 200";await using var command=new NpgsqlCommand(sql,connection);
+            if(!platform)command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
         });
         group.MapGet("/quality/evaluations",async(ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
             await using var connection=await store.Open(ct);
-            await using var command=new NpgsqlCommand(@"SELECT e.id,e.call_id,e.scorecard_id,s.name scorecard_name,s.version,e.reviewer_user_id,u.display_name reviewer_name,e.state,e.score,e.result,e.created_at,e.updated_at
-FROM quality_evaluations e JOIN quality_scorecards s ON s.id=e.scorecard_id JOIN users u ON u.id=e.reviewer_user_id WHERE e.tenant_id=$1 ORDER BY e.created_at DESC LIMIT 300",connection);
-            command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
+            var platform=user.IsInRole("platform_admin");var sql=platform?@"SELECT e.id,e.tenant_id,e.call_id,e.scorecard_id,s.name scorecard_name,s.version,e.reviewer_user_id,u.display_name reviewer_name,e.state,e.score,e.result,e.created_at,e.updated_at FROM quality_evaluations e JOIN quality_scorecards s ON s.id=e.scorecard_id JOIN users u ON u.id=e.reviewer_user_id ORDER BY e.created_at DESC LIMIT 300":@"SELECT e.id,e.tenant_id,e.call_id,e.scorecard_id,s.name scorecard_name,s.version,e.reviewer_user_id,u.display_name reviewer_name,e.state,e.score,e.result,e.created_at,e.updated_at FROM quality_evaluations e JOIN quality_scorecards s ON s.id=e.scorecard_id JOIN users u ON u.id=e.reviewer_user_id WHERE e.tenant_id=$1 ORDER BY e.created_at DESC LIMIT 300";await using var command=new NpgsqlCommand(sql,connection);
+            if(!platform)command.Parameters.AddWithValue(Tenant(user));return Results.Ok(await Rows(command,ct));
         });
         group.MapGet("/quality/evaluations/{id:guid}/notes",async(Guid id,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {

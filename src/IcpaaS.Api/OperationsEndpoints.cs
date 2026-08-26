@@ -55,7 +55,7 @@ public static class OperationsEndpoints
         });
         api.MapGet("/quality/scorecards",async(ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {
-            await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("SELECT id,name,version,definition,status,created_at FROM quality_scorecards WHERE tenant_id=$1 ORDER BY name,version DESC",c);q.Parameters.AddWithValue(Tenant(u));return Results.Ok(await Rows(q,ct));
+            await using var c=await s.Open(ct);var platform=u.IsInRole("platform_admin");var sql=platform?"SELECT id,tenant_id,name,version,definition,status,created_at FROM quality_scorecards ORDER BY name,version DESC":"SELECT id,tenant_id,name,version,definition,status,created_at FROM quality_scorecards WHERE tenant_id=$1 ORDER BY name,version DESC";await using var q=new NpgsqlCommand(sql,c);if(!platform)q.Parameters.AddWithValue(Tenant(u));return Results.Ok(await Rows(q,ct));
         });
         api.MapPost("/quality/scorecards",async(ScorecardCreate b,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {
