@@ -20,6 +20,7 @@ builder.Services.AddIcpaaSTelephony();
 builder.Services.AddSingleton<CapabilityService>();
 builder.Services.AddSingleton<PlatformStore>();builder.Services.AddSingleton<AuthService>();builder.Services.AddSingleton<WebRtcService>();
 builder.Services.AddSingleton<CapacityService>();
+builder.Services.AddSingleton<ManagedTelephonyService>();
 builder.Services.AddHostedService<ProvisioningWorker>();
 builder.Services.AddHttpClient("plugins",client=>client.Timeout=TimeSpan.FromSeconds(15));
 builder.Services.AddHostedService<PluginDeliveryWorker>();
@@ -56,10 +57,10 @@ app.MapGet("/health/ready", async (CapabilityService service, CancellationToken 
 app.MapGet("/api/v1/system/capabilities", async (CapabilityService service, CancellationToken ct) => Results.Ok(await service.ReadAsync(ct)));
 app.MapGet("/api/v1/telephony/engines", async (TelephonyRouter router, CancellationToken ct) =>
     Results.Ok(await Task.WhenAll(router.Engines.Select(x => x.ProbeAsync(ct)))));
-app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, TelephonyRouter router, CancellationToken ct) =>
+app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, ManagedTelephonyService managed, CancellationToken ct) =>
 {
     var request = new CallRequest(Guid.NewGuid(), body.TenantId, body.Destination, body.CallerId, null, "quick-connect-test", body.EngineKey, body.TrunkKey, 1);
-    return Results.Accepted(value: await router.OriginateAsync(request, ct));
+    return Results.Accepted(value: await managed.Originate(request, ct));
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/bootstrap",async(BootstrapRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Bootstrap(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct))).RequireRateLimiting("auth");
