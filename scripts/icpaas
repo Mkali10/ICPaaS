@@ -67,6 +67,7 @@ install(){
   fi
   bundle_sipjs
   mkdir -p "$APP_DIR/data/keys" "$BACKUP_ROOT"; chmod 700 "$APP_DIR/data" "$APP_DIR/data/keys" "$BACKUP_ROOT"
+  chown 1654:1654 "$APP_DIR/data/keys" || die "cannot assign API key-directory ownership"
   args=$(profiles)
   # shellcheck disable=SC2086
   dc $args build api
