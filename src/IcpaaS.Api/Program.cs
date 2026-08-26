@@ -60,7 +60,7 @@ app.MapGet("/api/v1/telephony/engines", async (TelephonyRouter router, Cancellat
 app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, ManagedTelephonyService managed, CancellationToken ct) =>
 {
     var request = new CallRequest(Guid.NewGuid(), body.TenantId, body.Destination, body.CallerId, null, "quick-connect-test", body.EngineKey, body.TrunkKey, 1);
-    return Results.Accepted(value: await managed.Originate(request, ct));
+    return Results.Accepted(value: (await managed.Originate(request, ct)).Result);
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/bootstrap",async(BootstrapRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Bootstrap(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct))).RequireRateLimiting("auth");
