@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Npgsql;
 
@@ -7,9 +8,12 @@ namespace IcpaaS.Api;
 public sealed record UserCreate(string Email, string DisplayName, string Password, string[] Roles);
 public sealed record UserUpdate(string? DisplayName, string? Status, string[]? Roles, bool RevokeSessions = false);
 public sealed record LogoutRequest(string RefreshToken);
+public sealed record ProfileUpdate(string? DisplayName);
+public sealed record PasswordChange(string CurrentPassword,string NewPassword);
 
 public static class UserEndpoints
 {
+    static Guid User(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub")!);
     static Guid Tenant(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue("tenant_id") ?? throw new UnauthorizedAccessException("Tenant required"));
     static bool Admin(ClaimsPrincipal user) => user.IsInRole("platform_admin") || user.IsInRole("tenant_owner") || user.IsInRole("tenant_admin");
     static readonly HashSet<string> AllowedRoles = ["tenant_owner", "tenant_admin", "supervisor", "agent", "auditor", "billing_admin"];
@@ -17,6 +21,18 @@ public static class UserEndpoints
     public static void MapUsers(this WebApplication app)
     {
         var api = app.MapGroup("/api/v1").RequireAuthorization();
+        api.MapGet("/profile", async (ClaimsPrincipal user, PlatformStore store, CancellationToken ct) =>
+        {
+            await using var connection=await store.Open(ct);await using var command=new NpgsqlCommand("SELECT id,tenant_id,email,display_name,roles,status,created_at,updated_at FROM users WHERE id=$1",connection);command.Parameters.AddWithValue(User(user));return await One(command,ct) is { } row?Results.Ok(row):Results.NotFound();
+        });
+        api.MapPatch("/profile", async (ProfileUpdate body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct) =>
+        {
+            if(string.IsNullOrWhiteSpace(body.DisplayName))return Results.BadRequest(new{error="Display name required"});await using var connection=await store.Open(ct);await using var command=new NpgsqlCommand("UPDATE users SET display_name=$2,updated_at=now() WHERE id=$1 RETURNING id,email,display_name,roles,status,updated_at",connection);Add(command,User(user),body.DisplayName.Trim());return Results.Ok(await One(command,ct));
+        });
+        api.MapPost("/profile/password", async (PasswordChange body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct) =>
+        {
+            if(body.NewPassword.Length<12)return Results.BadRequest(new{error="New password must be at least 12 characters"});await using var connection=await store.Open(ct);await using var find=new NpgsqlCommand("SELECT password_hash,password_salt FROM users WHERE id=$1",connection);find.Parameters.AddWithValue(User(user));await using var reader=await find.ExecuteReaderAsync(ct);if(!await reader.ReadAsync(ct))return Results.NotFound();var hash=reader.GetString(0);var salt=reader.GetString(1);await reader.CloseAsync();if(!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(hash),Convert.FromHexString(PlatformStore.Password(body.CurrentPassword,salt))))return Results.BadRequest(new{error="Current password is incorrect"});var nextSalt=PlatformStore.Salt();await using var update=new NpgsqlCommand("UPDATE users SET password_hash=$2,password_salt=$3,token_version=token_version+1,updated_at=now() WHERE id=$1",connection);Add(update,User(user),PlatformStore.Password(body.NewPassword,nextSalt),nextSalt);await update.ExecuteNonQueryAsync(ct);return Results.NoContent();
+        });
         api.MapGet("/users", async (ClaimsPrincipal user, PlatformStore store, CancellationToken ct) =>
         {
             if (!Admin(user)) return Results.Forbid();
