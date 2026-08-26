@@ -72,7 +72,7 @@ app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,Cancellat
 }).RequireRateLimiting("auth");
 app.MapPost("/api/v1/auth/refresh",async(RefreshRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Refresh(b,ct)));
 app.MapPost("/api/v1/auth/recover-platform-admin",async(AdminRecoveryRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>{await auth.ResetPlatformAdmin(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct);return Results.NoContent();}).RequireRateLimiting("auth");
-app.MapContactCenter();app.MapInfrastructureAdmin();app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapReseller();app.MapNodeEndpoints();app.MapProvisioning();
+app.MapContactCenter();app.MapContactCenterLifecycle();app.MapInfrastructureAdmin();app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapReseller();app.MapNodeEndpoints();app.MapProvisioning();
 
 app.MapFallbackToFile("index.html");
 app.Run();

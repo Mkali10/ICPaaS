@@ -1,0 +1,35 @@
+using System.Security.Claims;
+using Npgsql;
+
+namespace IcpaaS.Api;
+public sealed record ContactResourceState(bool Enabled);
+public sealed record AgentMovement(Guid AgentId,Guid? FromProcessId,Guid ToProcessId,int Priority=100);
+public static class ContactCenterLifecycleEndpoints
+{
+ static Guid Tenant(ClaimsPrincipal u)=>Guid.Parse(u.FindFirstValue("tenant_id")??throw new UnauthorizedAccessException("Tenant required"));
+ static bool Operator(ClaimsPrincipal u)=>u.IsInRole("tenant_owner")||u.IsInRole("tenant_admin")||u.IsInRole("supervisor");
+ public static void MapContactCenterLifecycle(this WebApplication app)
+ {
+  var api=app.MapGroup("/api/v1/contact-center").RequireAuthorization();
+  api.MapPatch("/{resource}/{id:guid}/state",async(string resource,Guid id,ContactResourceState b,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>{
+   if(!Operator(u))return Results.Forbid();var table=resource switch{"queues"=>"contact_queues","dispositions"=>"dispositions","processes"=>"processes",_=>null};if(table is null)return Results.BadRequest(new{error="Unknown contact-center resource"});await using var c=await s.Open(ct);var updated=table=="dispositions"?"":",updated_at=now()";await using var q=new NpgsqlCommand($"UPDATE {table} SET enabled=$3{updated} WHERE id=$1 AND tenant_id=$2 RETURNING id,enabled",c);Add(q,id,Tenant(u),b.Enabled);var row=await One(q,ct);return row is null?Results.NotFound():Results.Ok(row);
+  });
+  api.MapPost("/agents/move",async(AgentMovement b,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>{
+   if(!Operator(u))return Results.Forbid();var tenant=Tenant(u);await using var c=await s.Open(ct);await using var tx=await c.BeginTransactionAsync(ct);
+   if(b.FromProcessId is not null){await using var remove=new NpgsqlCommand("DELETE FROM process_agents pa USING processes p WHERE pa.process_id=p.id AND pa.user_id=$1 AND pa.process_id=$2 AND p.tenant_id=$3",c,tx);Add(remove,b.AgentId,b.FromProcessId,tenant);await remove.ExecuteNonQueryAsync(ct);}
+   await using var add=new NpgsqlCommand("INSERT INTO process_agents(process_id,user_id,priority,enabled) SELECT $1,$2,$3,true WHERE EXISTS(SELECT 1 FROM processes WHERE id=$1 AND tenant_id=$4) AND EXISTS(SELECT 1 FROM users WHERE id=$2 AND tenant_id=$4 AND 'agent'=ANY(roles)) ON CONFLICT(process_id,user_id) DO UPDATE SET priority=excluded.priority,enabled=true",c,tx);Add(add,b.ToProcessId,b.AgentId,b.Priority,tenant);if(await add.ExecuteNonQueryAsync(ct)==0){await tx.RollbackAsync(ct);return Results.BadRequest(new{error="Invalid agent or target process"});}await tx.CommitAsync(ct);return Results.Ok(new{b.AgentId,b.FromProcessId,b.ToProcessId,b.Priority});
+  });
+  api.MapGet("/lists/{id:guid}/summary",async(Guid id,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>{
+   await using var c=await s.Open(ct);await using var q=new NpgsqlCommand(@"SELECT l.id,l.name,l.status,l.total_rows,l.valid_rows,l.duplicate_rows,count(*) FILTER(WHERE ct.state='fresh') fresh,count(*) FILTER(WHERE ct.state='queued') queued,count(*) FILTER(WHERE ct.state='callback') callback,count(*) FILTER(WHERE ct.state='completed') completed,count(*) FILTER(WHERE ct.state='invalid') invalid,coalesce(sum(ct.attempt_count),0) attempts FROM contact_lists l LEFT JOIN contacts ct ON ct.list_id=l.id WHERE l.id=$1 AND l.tenant_id=$2 GROUP BY l.id",c);Add(q,id,Tenant(u));var row=await One(q,ct);return row is null?Results.NotFound():Results.Ok(row);
+  });
+  api.MapPatch("/lists/{id:guid}/archive",async(Guid id,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>{
+   if(!Operator(u))return Results.Forbid();await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("UPDATE contact_lists SET status='archived' WHERE id=$1 AND tenant_id=$2 RETURNING id,status",c);Add(q,id,Tenant(u));var row=await One(q,ct);return row is null?Results.NotFound():Results.Ok(row);
+  });
+  api.MapGet("/campaigns/{id:guid}/contacts",async(Guid id,string? state,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>{
+   await using var c=await s.Open(ct);await using var q=new NpgsqlCommand(@"SELECT cc.contact_id,cc.state,cc.attempts,cc.assigned_agent_id,cc.last_error,cc.queued_at,ct.phone_number,ct.first_name,ct.last_name,ct.last_disposition_id,ct.next_callback_at FROM campaign_contacts cc JOIN campaigns ca ON ca.id=cc.campaign_id JOIN contacts ct ON ct.id=cc.contact_id WHERE cc.campaign_id=$1 AND ca.tenant_id=$2 AND ($3 IS NULL OR cc.state=$3) ORDER BY cc.updated_at DESC LIMIT 500",c);Add(q,id,Tenant(u),(object?)state??DBNull.Value);return Results.Ok(await Rows(q,ct));
+  });
+ }
+ static void Add(NpgsqlCommand c,params object?[] v){foreach(var x in v)c.Parameters.AddWithValue(x??DBNull.Value);}
+ static async Task<object?> One(NpgsqlCommand c,CancellationToken ct){await using var r=await c.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))return null;var d=new Dictionary<string,object?>();for(var i=0;i<r.FieldCount;i++)d[r.GetName(i)]=r.IsDBNull(i)?null:r.GetValue(i);return d;}
+ static async Task<List<Dictionary<string,object?>>> Rows(NpgsqlCommand c,CancellationToken ct){await using var r=await c.ExecuteReaderAsync(ct);var rows=new List<Dictionary<string,object?>>();while(await r.ReadAsync(ct)){var d=new Dictionary<string,object?>();for(var i=0;i<r.FieldCount;i++)d[r.GetName(i)]=r.IsDBNull(i)?null:r.GetValue(i);rows.Add(d);}return rows;}
+}
