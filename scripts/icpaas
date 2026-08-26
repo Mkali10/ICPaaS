@@ -32,6 +32,8 @@ prepare_env(){
   [ -n "$(value POSTGRES_PASSWORD)" ] || set_value POSTGRES_PASSWORD "$(secret)"
   [ -n "$(value REDIS_PASSWORD)" ] || set_value REDIS_PASSWORD "$(secret)"
   [ -n "$(value TURN_SHARED_SECRET)" ] || set_value TURN_SHARED_SECRET "$(secret)"
+  [ -n "$(value ICPaaS__Media__TurnSharedSecret)" ] || set_value ICPaaS__Media__TurnSharedSecret "$(value TURN_SHARED_SECRET)"
+  if [ -n "$(value ICPaaS__Media__TurnRealm)" ] && [ -z "$(value TURN_REALM)" ]; then set_value TURN_REALM "$(value ICPaaS__Media__TurnRealm)"; fi
   case "$(value ICPaaS__Security__JwtSecret)" in replace-*|'') set_value ICPaaS__Security__JwtSecret "$(secret)";; esac
   case "$(value ICPaaS__Security__BootstrapKey)" in replace-*|'') set_value ICPaaS__Security__BootstrapKey "$(secret)";; esac
   case "$(value ICPaaS__Security__NodeKey)" in replace-*|'') set_value ICPaaS__Security__NodeKey "$(secret)";; esac
@@ -72,7 +74,11 @@ install(){
   dc $args run --rm migrate
   # shellcheck disable=SC2086
   dc $args up -d api
-  [ "${ICPAAAS_MEDIA_BUNDLED:-false}" != true ] || dc --profile media-bundled up -d coturn
+  if [ "${ICPAAAS_MEDIA_BUNDLED:-false}" = true ]; then
+    [ -n "$(value TURN_REALM)" ] || die "TURN_REALM or ICPaaS__Media__TurnRealm is required for bundled media"
+    set_value ICPaaS__Media__TurnRealm "$(value TURN_REALM)"
+    dc --profile media-bundled up -d coturn
+  fi
   doctor; say 'Installation completed'
 }
 backup(){

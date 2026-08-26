@@ -7,8 +7,11 @@ using IcpaaS.Telephony;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 2 * 1024 * 1024);
 builder.Services.AddOptions<PlatformOptions>()
     .Bind(builder.Configuration.GetSection(PlatformOptions.SectionName))
     .Validate(options => new[] { "auto", "demo", "standalone", "application", "telephony-node", "distributed", "hybrid" }.Contains(options.Deployment.Profile), "Invalid deployment profile")
@@ -23,12 +26,29 @@ builder.Services.AddHostedService<PluginDeliveryWorker>();
 var jwtSecret=builder.Configuration["ICPaaS:Security:JwtSecret"]??throw new InvalidOperationException("ICPaaS:Security:JwtSecret is required");if(jwtSecret.Length<32)throw new InvalidOperationException("JWT secret must be at least 32 characters");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>o.TokenValidationParameters=new(){ValidateIssuer=true,ValidIssuer="icpaas",ValidateAudience=true,ValidAudience="icpaas-api",ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),ValidateLifetime=true,ClockSkew=TimeSpan.FromSeconds(30)});builder.Services.AddAuthorization();
 builder.Services.AddProblemDetails();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
 app.UseExceptionHandler();
 app.UseDefaultFiles();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)";
+    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+    await next();
+});
 app.UseStaticFiles();
+app.UseRateLimiter();
 app.UseAuthentication();app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "live", time = DateTimeOffset.UtcNow }));
@@ -42,8 +62,8 @@ app.MapPost("/api/v1/telephony/test-call", async (TestCallRequest body, Telephon
     return Results.Accepted(value: await router.OriginateAsync(request, ct));
 }).RequireAuthorization();
 
-app.MapPost("/api/v1/auth/bootstrap",async(BootstrapRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Bootstrap(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct)));
-app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Login(b,ct)));
+app.MapPost("/api/v1/auth/bootstrap",async(BootstrapRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Bootstrap(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct))).RequireRateLimiting("auth");
+app.MapPost("/api/v1/auth/login",async(LoginRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Login(b,ct))).RequireRateLimiting("auth");
 app.MapPost("/api/v1/auth/refresh",async(RefreshRequest b,AuthService auth,CancellationToken ct)=>Results.Ok(await auth.Refresh(b,ct)));
 app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapNodeEndpoints();app.MapProvisioning();
 
