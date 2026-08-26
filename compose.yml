@@ -9,6 +9,10 @@ services:
       ICPaaS__Database__ConnectionString: ${ICPaaS_DATABASE_CONNECTION_STRING:-Host=postgres;Port=${POSTGRES_PORT:-55432};Database=${POSTGRES_DB:-icpaas};Username=${POSTGRES_USER:-icpaas};Password=${POSTGRES_PASSWORD}}
     ports: ["${ICPaaS_API_BIND:-127.0.0.1}:${ICPaaS_API_PORT:-18080}:8080"]
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    volumes: ["./data/keys:/home/app/.aspnet/DataProtection-Keys"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -35,16 +39,18 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-icpaas}
       POSTGRES_USER: ${POSTGRES_USER:-icpaas}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      PGHOST: ${POSTGRES_HOST:-postgres}
       PGPORT: ${POSTGRES_PORT:-55432}
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
     volumes:
       - ./database/migrations:/migrations:ro
       - ./scripts/migrate.sh:/migrate.sh:ro
     entrypoint: ["/bin/sh", "/migrate.sh"]
     restart: "no"
-    profiles: ["standalone"]
+    profiles: ["standalone", "application", "distributed"]
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--port", "${REDIS_PORT:-56379}", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]

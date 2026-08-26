@@ -1,0 +1,115 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+APP_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+ENV_FILE="$APP_DIR/.env"
+COMPOSE_FILE="$APP_DIR/compose.yml"
+BACKUP_ROOT=${ICPAAAS_BACKUP_DIR:-"$APP_DIR/backups"}
+SIPJS_URL=https://github.com/onsip/SIP.js/releases/download/0.21.2/sip-0.21.2.min.js
+
+say(){ printf '%s\n' "[ICPaaS] $*"; }
+die(){ printf '%s\n' "[ICPaaS] ERROR: $*" >&2; exit 1; }
+need(){ command -v "$1" >/dev/null 2>&1 || die "$1 is required"; }
+dc(){ docker compose -f "$COMPOSE_FILE" "$@"; }
+value(){ sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; }
+secret(){ openssl rand -base64 48 | tr -d '\n' | tr '/+' '_-'; }
+set_value(){
+  key=$1 val=$2 tmp=$(mktemp)
+  awk -v k="$key" -v v="$val" 'BEGIN{done=0} index($0,k"=")==1{print k"="v;done=1;next}{print} END{if(!done)print k"="v}' "$ENV_FILE" >"$tmp"
+  chmod 600 "$tmp"; mv "$tmp" "$ENV_FILE"
+}
+profiles(){
+  case "$(value ICPaaS__Deployment__Profile)" in
+    application) printf '%s' '--profile application' ;;
+    distributed) printf '%s' '--profile distributed' ;;
+    *) printf '%s' '--profile standalone' ;;
+  esac
+}
+prepare_env(){
+  [ -f "$ENV_FILE" ] || cp "$APP_DIR/.env.example" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  [ -n "$(value POSTGRES_PASSWORD)" ] || set_value POSTGRES_PASSWORD "$(secret)"
+  [ -n "$(value REDIS_PASSWORD)" ] || set_value REDIS_PASSWORD "$(secret)"
+  [ -n "$(value TURN_SHARED_SECRET)" ] || set_value TURN_SHARED_SECRET "$(secret)"
+  case "$(value ICPaaS__Security__JwtSecret)" in replace-*|'') set_value ICPaaS__Security__JwtSecret "$(secret)";; esac
+  case "$(value ICPaaS__Security__BootstrapKey)" in replace-*|'') set_value ICPaaS__Security__BootstrapKey "$(secret)";; esac
+  case "$(value ICPaaS__Security__NodeKey)" in replace-*|'') set_value ICPaaS__Security__NodeKey "$(secret)";; esac
+}
+bundle_sipjs(){
+  target="$APP_DIR/src/IcpaaS.Api/wwwroot/vendor/sip-0.21.2.min.js"
+  [ -s "$target" ] && return
+  mkdir -p "$(dirname "$target")"
+  if [ -n "${SIPJS_SOURCE:-}" ]; then cp "$SIPJS_SOURCE" "$target"; else need curl; curl --fail --location --retry 3 -o "$target.tmp" "$SIPJS_URL"; mv "$target.tmp" "$target"; fi
+  [ "$(wc -c <"$target")" -gt 250000 ] || die 'SIP.js bundle validation failed'
+  chmod 644 "$target"
+}
+doctor(){
+  port=$(value ICPaaS_API_PORT); [ -n "$port" ] || port=18080
+  bind=$(value ICPaaS_API_BIND); [ -n "$bind" ] || bind=127.0.0.1
+  [ "$bind" != 0.0.0.0 ] || bind=127.0.0.1
+  dc ps; need curl
+  curl -fsS "http://$bind:$port/health/live" >/dev/null || die 'liveness check failed'
+  curl -fsS "http://$bind:$port/health/ready" >/dev/null || die 'readiness check failed'
+  say "API live and ready on configured bind/port"
+}
+install(){
+  need docker; need openssl; docker compose version >/dev/null
+  prepare_env
+  profile=${ICPAAAS_PROFILE:-$(value ICPaaS__Deployment__Profile)}; [ "$profile" != auto ] || profile=standalone
+  case "$profile" in standalone|application|distributed);; *) die 'invalid deployment profile';; esac
+  set_value ICPaaS__Deployment__Profile "$profile"
+  if [ "$profile" != standalone ]; then
+    [ -n "$(value ICPaaS_DATABASE_CONNECTION_STRING)" ] || die 'external database connection string is required'
+    for key in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD; do [ -n "$(value "$key")" ] || die "$key is required"; done
+  fi
+  bundle_sipjs
+  mkdir -p "$APP_DIR/data/keys" "$BACKUP_ROOT"; chmod 700 "$APP_DIR/data" "$APP_DIR/data/keys" "$BACKUP_ROOT"
+  args=$(profiles)
+  # shellcheck disable=SC2086
+  dc $args build api
+  # shellcheck disable=SC2086
+  dc $args run --rm migrate
+  # shellcheck disable=SC2086
+  dc $args up -d api
+  [ "${ICPAAAS_MEDIA_BUNDLED:-false}" != true ] || dc --profile media-bundled up -d coturn
+  doctor; say 'Installation completed'
+}
+backup(){
+  need docker; prepare_env; mkdir -p "$BACKUP_ROOT"; chmod 700 "$BACKUP_ROOT"
+  stamp=$(date -u +%Y%m%dT%H%M%SZ); work=$(mktemp -d); trap 'rm -rf "$work"' EXIT HUP INT TERM
+  cp "$ENV_FILE" "$work/environment"; chmod 600 "$work/environment"
+  git -C "$APP_DIR" rev-parse HEAD >"$work/git-commit" 2>/dev/null || printf '%s\n' unknown >"$work/git-commit"
+  if [ "$(value ICPaaS__Deployment__Profile)" = standalone ]; then
+    dc exec -T postgres pg_dump -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
+  else
+    docker run --rm -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres:17-alpine pg_dump -h "$(value POSTGRES_HOST)" -p "$(value POSTGRES_PORT)" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
+  fi
+  tar -C "$work" -czf "$BACKUP_ROOT/icpaas-$stamp.tar.gz" .; chmod 600 "$BACKUP_ROOT/icpaas-$stamp.tar.gz"
+  say "Backup created: $BACKUP_ROOT/icpaas-$stamp.tar.gz"
+}
+restore(){
+  archive=${1:-}; [ -f "$archive" ] || die 'backup archive not found'
+  [ "${ICPAAAS_CONFIRM_RESTORE:-}" = RESTORE ] || die 'set ICPAAAS_CONFIRM_RESTORE=RESTORE'
+  work=$(mktemp -d); trap 'rm -rf "$work"' EXIT HUP INT TERM; tar -xzf "$archive" -C "$work"
+  [ -s "$work/database.dump" ] && [ -s "$work/environment" ] || die 'invalid backup archive'
+  cp "$ENV_FILE" "$ENV_FILE.before-restore-$(date +%s)" 2>/dev/null || true; cp "$work/environment" "$ENV_FILE"; chmod 600 "$ENV_FILE"
+  dc stop api || true
+  if [ "$(value ICPaaS__Deployment__Profile)" = standalone ]; then
+    dc exec -T postgres dropdb -U "$(value POSTGRES_USER)" --if-exists "$(value POSTGRES_DB)"
+    dc exec -T postgres createdb -U "$(value POSTGRES_USER)" "$(value POSTGRES_DB)"
+    dc exec -T postgres pg_restore -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" --clean --if-exists <"$work/database.dump"
+  else
+    docker run --rm -i -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres:17-alpine pg_restore -h "$(value POSTGRES_HOST)" -p "$(value POSTGRES_PORT)" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" --clean --if-exists <"$work/database.dump"
+  fi
+  args=$(profiles); dc $args up -d api; doctor; say 'Restore completed'
+}
+update(){
+  need git; backup
+  git -C "$APP_DIR" diff --quiet || die 'working tree has local changes'
+  git -C "$APP_DIR" pull --ff-only; install
+}
+case "${1:-}" in
+  install) install;; doctor) doctor;; backup) backup;; restore) shift; restore "${1:-}";; update) update;;
+  *) printf '%s\n' 'Usage: scripts/icpaas {install|doctor|backup|restore <archive>|update}'; exit 2;;
+esac
