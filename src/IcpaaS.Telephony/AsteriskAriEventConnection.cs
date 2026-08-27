@@ -96,7 +96,8 @@ public sealed class AsteriskAriEventConnection : BackgroundService
         var attributes = new Dictionary<string, string> { ["engineCallId"] = channelId! };
         if (channel.TryGetProperty("name", out var name)) attributes["channel"] = name.GetString() ?? "";
         if (channel.TryGetProperty("state", out var state)) attributes["state"] = state.GetString() ?? "";
-        return new(platformId, "asterisk", Normalize(type), DateTimeOffset.UtcNow, attributes);
+        var normalized=type=="ChannelStateChange"&&channel.TryGetProperty("state",out var channelState)&&channelState.GetString()=="Up"?"call.answered":Normalize(type);
+        return new(platformId, "asterisk", normalized, DateTimeOffset.UtcNow, attributes);
     }
 
     private static bool TryChannel(JsonElement root, out JsonElement channel)
