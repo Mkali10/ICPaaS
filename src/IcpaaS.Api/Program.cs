@@ -81,6 +81,7 @@ app.MapPost("/api/v1/auth/recover-platform-admin",async(AdminRecoveryRequest b,H
 app.MapContactCenter();app.MapContactCenterLifecycle();app.MapInfrastructureAdmin();app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapReseller();app.MapNodeEndpoints();app.MapProvisioning();
 app.MapSupervisor();
 app.MapRecordings();
+app.MapReports();
 
 app.MapFallbackToFile("index.html");
 app.Run();

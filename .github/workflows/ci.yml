@@ -16,7 +16,7 @@ jobs:
       - run: dotnet restore ICPaaS.sln
       - run: dotnet build ICPaaS.sln -c Release --no-restore
       - name: Validate release tooling
-        run: sh -n scripts/icpaas && sh -n scripts/icpaas-recording-uploader && sh -n scripts/migrate.sh
+        run: sh -n scripts/icpaas && sh -n scripts/icpaas-recording-uploader && sh -n scripts/acceptance.sh && sh -n scripts/migrate.sh
   compose:
     runs-on: ubuntu-latest
     steps:

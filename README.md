@@ -114,6 +114,8 @@ Tenant
 - Quality scorecards and evaluations.
 - Audit-event and operations-health foundations.
 - Customer billing ledger and credit adjustment screens.
+- Date-filtered call, campaign, agent and disposition reports.
+- Authorized calls/outcomes CSV exports.
 - PostgreSQL 17 migrations, Docker Compose profiles and installer tooling.
 
 ## Calling modes
@@ -235,6 +237,33 @@ sh -n scripts/icpaas
 docker compose -f compose.yml config --quiet
 ```
 
+## Release acceptance
+
+Run authenticated API and configuration checks against the deployed server:
+
+```bash
+export ICPAAAS_ACCEPTANCE_API_URL=https://control.example.com
+export ICPAAAS_ACCEPTANCE_EMAIL=owner@example.com
+export ICPAAAS_ACCEPTANCE_PASSWORD='tenant-owner-password'
+export ICPAAAS_ACCEPTANCE_WORKSPACE=workspace-slug
+./scripts/acceptance.sh
+```
+
+To include a real managed SIP originate, explicitly provide a destination and optional CLI. This can create a chargeable carrier call:
+
+```bash
+export ICPAAAS_ACCEPTANCE_DESTINATION=+919876543210
+export ICPAAAS_ACCEPTANCE_CALLER_ID=+911234567890
+./scripts/acceptance.sh
+```
+
+Backups include PostgreSQL, environment configuration, Data Protection keys and recordings. Validate an archive without restoring it:
+
+```bash
+./scripts/icpaas backup
+./scripts/icpaas verify-backup backups/icpaas-YYYYMMDDTHHMMSSZ.tar.gz
+```
+
 ## Current status
 
 | Area | Status |
@@ -251,7 +280,7 @@ docker compose -f compose.yml config --quiet
 | Live monitor and supervision | Implemented; live acceptance pending |
 | Secure recordings | Implemented with node uploader, retry and quarantine lifecycle |
 | DNC, consent and calling-hour enforcement | Implemented foundation; regulatory policy review required |
-| Reporting and analytics | Partial |
+| Calling, campaign, agent and disposition reports | Implemented with CSV exports |
 | Billing | Ledger/UI foundation; runtime charging enforcement pending |
 | Native CRM/messaging plugins | Not implemented |
 | IVR/visual flow builder | Not implemented |

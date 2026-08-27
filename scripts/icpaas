@@ -87,7 +87,7 @@ install(){
   doctor; say 'Installation completed'
 }
 backup(){
-  need docker; prepare_env; mkdir -p "$BACKUP_ROOT"; chmod 700 "$BACKUP_ROOT"
+  need docker; need sha256sum; prepare_env; mkdir -p "$BACKUP_ROOT"; chmod 700 "$BACKUP_ROOT"
   stamp=$(date -u +%Y%m%dT%H%M%SZ); work=$(mktemp -d); trap 'rm -rf "$work"' EXIT HUP INT TERM
   cp "$ENV_FILE" "$work/environment"; chmod 600 "$work/environment"
   git -C "$APP_DIR" rev-parse HEAD >"$work/git-commit" 2>/dev/null || printf '%s\n' unknown >"$work/git-commit"
@@ -96,6 +96,8 @@ backup(){
   else
     docker run --rm -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres:17-alpine pg_dump -h "$(value POSTGRES_HOST)" -p "$(value POSTGRES_PORT)" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
   fi
+  tar -C "$APP_DIR" -czf "$work/data.tar.gz" data/keys data/recordings
+  (cd "$work" && sha256sum environment git-commit database.dump data.tar.gz >SHA256SUMS)
   tar -C "$work" -czf "$BACKUP_ROOT/icpaas-$stamp.tar.gz" .; chmod 600 "$BACKUP_ROOT/icpaas-$stamp.tar.gz"
   say "Backup created: $BACKUP_ROOT/icpaas-$stamp.tar.gz"
 }
@@ -103,7 +105,8 @@ restore(){
   archive=${1:-}; [ -f "$archive" ] || die 'backup archive not found'
   [ "${ICPAAAS_CONFIRM_RESTORE:-}" = RESTORE ] || die 'set ICPAAAS_CONFIRM_RESTORE=RESTORE'
   work=$(mktemp -d); trap 'rm -rf "$work"' EXIT HUP INT TERM; tar -xzf "$archive" -C "$work"
-  [ -s "$work/database.dump" ] && [ -s "$work/environment" ] || die 'invalid backup archive'
+  [ -s "$work/database.dump" ] && [ -s "$work/environment" ] && [ -s "$work/data.tar.gz" ] && [ -s "$work/SHA256SUMS" ] || die 'invalid backup archive'
+  (cd "$work" && sha256sum -c SHA256SUMS) || die 'backup integrity verification failed'
   cp "$ENV_FILE" "$ENV_FILE.before-restore-$(date +%s)" 2>/dev/null || true; cp "$work/environment" "$ENV_FILE"; chmod 600 "$ENV_FILE"
   dc stop api || true
   if [ "$(value ICPaaS__Deployment__Profile)" = standalone ]; then
@@ -113,7 +116,21 @@ restore(){
   else
     docker run --rm -i -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres:17-alpine pg_restore -h "$(value POSTGRES_HOST)" -p "$(value POSTGRES_PORT)" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" --clean --if-exists <"$work/database.dump"
   fi
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  [ ! -d "$APP_DIR/data/keys" ] || mv "$APP_DIR/data/keys" "$APP_DIR/data/keys.before-restore-$stamp"
+  [ ! -d "$APP_DIR/data/recordings" ] || mv "$APP_DIR/data/recordings" "$APP_DIR/data/recordings.before-restore-$stamp"
+  tar -xzf "$work/data.tar.gz" -C "$APP_DIR"
+  chown -R 1654:1654 "$APP_DIR/data/keys" "$APP_DIR/data/recordings"
   args=$(profiles); dc $args up -d api; doctor; say 'Restore completed'
+}
+verify_backup(){
+  archive=${1:-}; [ -f "$archive" ] || die 'backup archive not found';need sha256sum
+  work=$(mktemp -d); trap 'rm -rf "$work"' EXIT HUP INT TERM;tar -xzf "$archive" -C "$work"
+  [ -s "$work/database.dump" ] && [ -s "$work/environment" ] && [ -s "$work/data.tar.gz" ] && [ -s "$work/SHA256SUMS" ] || die 'backup is incomplete'
+  (cd "$work" && sha256sum -c SHA256SUMS) || die 'backup checksum failed'
+  tar -tzf "$work/data.tar.gz" >/dev/null || die 'backup data archive is unreadable'
+  if command -v pg_restore >/dev/null 2>&1;then pg_restore --list "$work/database.dump" >/dev/null||die 'database dump is unreadable';else docker run --rm -v "$work:/backup:ro" postgres:17-alpine pg_restore --list /backup/database.dump >/dev/null||die 'database dump is unreadable';fi
+  say 'Backup integrity, database dump, keys and recordings verified'
 }
 update(){
   need git; backup
@@ -145,6 +162,6 @@ install_recording_uploader(){
 }
 case "${1:-}" in
   install) install;; doctor) doctor;; backup) backup;; restore) shift; restore "${1:-}";; update) update;;
-  install-recording-uploader) shift; install_recording_uploader "${1:-}";;
-  *) printf '%s\n' 'Usage: scripts/icpaas {install|doctor|backup|restore <archive>|update|install-recording-uploader <api-url>}'; exit 2;;
+  install-recording-uploader) shift; install_recording_uploader "${1:-}";; verify-backup) shift; verify_backup "${1:-}";;
+  *) printf '%s\n' 'Usage: scripts/icpaas {install|doctor|backup|verify-backup <archive>|restore <archive>|update|install-recording-uploader <api-url>}'; exit 2;;
 esac
