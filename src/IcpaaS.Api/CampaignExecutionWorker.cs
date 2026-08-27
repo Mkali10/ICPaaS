@@ -20,6 +20,7 @@ public sealed class CampaignExecutionWorker(
         {
             try
             {
+                await ReleaseWrapUpAgents(stoppingToken);
                 foreach (var campaign in await RunnableCampaigns(stoppingToken))
                     await Dispatch(campaign, stoppingToken);
             }
@@ -28,6 +29,17 @@ public sealed class CampaignExecutionWorker(
 
             await Task.Delay(TimeSpan.FromMilliseconds(250), stoppingToken);
         }
+    }
+
+    async Task ReleaseWrapUpAgents(CancellationToken ct)
+    {
+        await using var connection=await store.Open(ct);
+        await using var command=new NpgsqlCommand(@"UPDATE agent_presence ap SET state='available',last_state_at=now()
+FROM campaigns ca JOIN processes p ON p.id=ca.process_id LEFT JOIN contact_queues q ON q.id=p.queue_id
+WHERE ap.campaign_id=ca.id AND ap.state='wrap_up'
+  AND ap.last_state_at + (coalesce(q.wrap_up_seconds,20)*interval '1 second')<=now()
+  AND NOT EXISTS(SELECT 1 FROM campaign_contacts cc WHERE cc.campaign_id=ca.id AND cc.assigned_agent_id=ap.user_id AND cc.state='connected')",connection);
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     async Task<List<Campaign>> RunnableCampaigns(CancellationToken ct)

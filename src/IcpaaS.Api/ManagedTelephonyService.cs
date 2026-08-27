@@ -3,24 +3,28 @@ using IcpaaS.Core.Telephony;
 using IcpaaS.Telephony;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using System.Collections.Concurrent;
 
 namespace IcpaaS.Api;
 
 public sealed record ManagedOriginateResult(OriginateResult Result,string TrunkKey,string EngineKey);
-public sealed class ManagedTelephonyService(PlatformStore store,ILoggerFactory logs)
+public sealed class ManagedTelephonyService(PlatformStore store,ILoggerFactory logs,CallEventSink events):IAsyncDisposable
 {
     sealed record Binding(string Trunk,string? Cli,string Engine,string Control,string? Username,string? Secret);
+    sealed record AdapterEntry(ITelephonyEngine Engine,BackgroundService? Connection);
+    readonly ConcurrentDictionary<string,Task<AdapterEntry>> adapters=new();
+    readonly CancellationTokenSource shutdown=new();
     public async Task<ManagedOriginateResult> Originate(CallRequest request,CancellationToken ct)
     {
         var binding=await Resolve(request.TenantId,request.Destination,request.TrunkKey,null,ct);
-        var adapter=Adapter(binding);var health=await adapter.ProbeAsync(ct);
+        var adapter=(await Adapter(binding,ct)).Engine;var health=await adapter.ProbeAsync(ct);
         if(health.Availability is EngineAvailability.Disabled or EngineAvailability.Unavailable)throw new InvalidOperationException($"{binding.Engine} control endpoint unavailable: {health.Message}");
         var call=request with{CallerId=request.CallerId??binding.Cli,PreferredEngine=binding.Engine,TrunkKey=binding.Trunk};
         var result=await adapter.OriginateAsync(call,ct);return new(result,binding.Trunk,binding.Engine);
     }
     public async Task Control(Guid tenant,CallRef call,string action,CallControl body,string? trunkKey,CancellationToken ct)
     {
-        var binding=await Resolve(tenant,"control",trunkKey,call.EngineKey,ct);var adapter=Adapter(binding);
+        var binding=await Resolve(tenant,"control",trunkKey,call.EngineKey,ct);var adapter=(await Adapter(binding,ct)).Engine;
         switch(action){
             case "answer":await adapter.AnswerAsync(call,ct);break;
             case "hangup":await adapter.HangupAsync(call,body.Reason??"normal",ct);break;
@@ -58,16 +62,31 @@ WHERE ($4 IS NULL OR engine_type=$4) ORDER BY rank,route_priority,created_at LIM
         if(string.IsNullOrWhiteSpace(control))throw new InvalidOperationException($"Control endpoint is missing for {engine} node");
         return new(trunk,cli,engine,control,username,ResolveSecret(nodeSecret??trunkSecret));
     }
-    ITelephonyEngine Adapter(Binding b)
+    Task<AdapterEntry> Adapter(Binding b,CancellationToken ct)
+    {
+        var key=$"{b.Engine}|{b.Control}|{b.Username}|{b.Secret?.GetHashCode()}";
+        return adapters.GetOrAdd(key,_=>CreateAdapter(b,shutdown.Token));
+    }
+    async Task<AdapterEntry> CreateAdapter(Binding b,CancellationToken ct)
     {
         var options=b.Engine switch{
             "freeswitch"=>new PlatformOptions{Telephony=new(){FreeSwitch=new(){Enabled=true,EslEndpoint=b.Control,EslPassword=b.Secret}}},
             "asterisk"=>new PlatformOptions{Telephony=new(){Asterisk=new(){Enabled=true,AriBaseUrl=b.Control,AriUsername=b.Username,AriPassword=b.Secret,AriApp="icpaas"}}},
             "generic_sip" or "generic-sip"=>new PlatformOptions{Telephony=new(){GenericSip=new(){Enabled=true,ControlWebhook=b.Control,ApiToken=b.Secret}}},
             _=>throw new InvalidOperationException($"Managed runtime does not support engine '{b.Engine}'")};
-        if(b.Engine=="freeswitch"){var o=Options.Create(options);return new FreeSwitchEngine(o,new FreeSwitchEslConnection(o,logs.CreateLogger<FreeSwitchEslConnection>()));}
-        if(b.Engine=="asterisk"){var o=Options.Create(options);return new AsteriskEngine(o,new AsteriskAriEventConnection(o,logs.CreateLogger<AsteriskAriEventConnection>()));}
-        return new GenericSipEngine(Options.Create(options));
+        ITelephonyEngine engine;BackgroundService? connection=null;
+        if(b.Engine=="freeswitch"){var o=Options.Create(options);connection=new FreeSwitchEslConnection(o,logs.CreateLogger<FreeSwitchEslConnection>());engine=new FreeSwitchEngine(o,(FreeSwitchEslConnection)connection);}
+        else if(b.Engine=="asterisk"){var o=Options.Create(options);connection=new AsteriskAriEventConnection(o,logs.CreateLogger<AsteriskAriEventConnection>());engine=new AsteriskEngine(o,(AsteriskAriEventConnection)connection);}
+        else engine=new GenericSipEngine(Options.Create(options));
+        if(connection is not null){await connection.StartAsync(ct);_ = Pump(engine,shutdown.Token);}
+        return new(engine,connection);
     }
+    async Task Pump(ITelephonyEngine engine,CancellationToken ct)
+    {
+        try{await foreach(var item in engine.SubscribeAsync(ct))await events.Handle(item,ct);}
+        catch(OperationCanceledException) when(ct.IsCancellationRequested){}
+        catch(Exception ex){logs.CreateLogger<ManagedTelephonyService>().LogError(ex,"Managed {Engine} event pump stopped",engine.EngineKey);}
+    }
+    public async ValueTask DisposeAsync(){shutdown.Cancel();foreach(var entryTask in adapters.Values){if(!entryTask.IsCompletedSuccessfully)continue;var entry=await entryTask;if(entry.Connection is not null)await entry.Connection.StopAsync(CancellationToken.None);if(entry.Engine is IDisposable disposable)disposable.Dispose();}shutdown.Dispose();}
     static string? ResolveSecret(string? reference){if(string.IsNullOrWhiteSpace(reference))return null;if(!reference.StartsWith("env:",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Secrets must use an env:VARIABLE reference");var name=reference[4..];return Environment.GetEnvironmentVariable(name)??throw new InvalidOperationException($"Secret environment variable '{name}' is not set");}
 }
