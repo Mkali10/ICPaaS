@@ -120,7 +120,31 @@ update(){
   git -C "$APP_DIR" diff --quiet || die 'working tree has local changes'
   git -C "$APP_DIR" pull --ff-only; install
 }
+install_recording_uploader(){
+  [ "$(id -u)" -eq 0 ] || die 'recording uploader installation must run as root'
+  api_url=${1:-}; [ -n "$api_url" ] || die 'usage: scripts/icpaas install-recording-uploader https://control.example.com'
+  prepare_env; node_key=$(value ICPaaS__Security__NodeKey); [ -n "$node_key" ] || die 'node key is not configured'
+  install -m 0755 "$APP_DIR/scripts/icpaas-recording-uploader" /usr/local/bin/icpaas-recording-uploader
+  install -d -m 0750 /etc/icpaas
+  install -d -m 0755 /var/lib/icpaas/recordings
+  env_target=/etc/icpaas/recording-uploader.env
+  umask 077
+  {
+    printf '%s\n' "ICPAAAS_API_URL=$api_url"
+    printf '%s\n' "ICPAAAS_NODE_KEY=$node_key"
+    printf '%s\n' 'ICPAAAS_RECORDING_DIR=/var/lib/icpaas/recordings'
+    printf '%s\n' 'ICPAAAS_RECORDING_MIN_AGE_SECONDS=15'
+    printf '%s\n' 'ICPAAAS_RECORDING_MAX_ATTEMPTS=10'
+  } >"$env_target"
+  chown root:root "$env_target"; chmod 0600 "$env_target"
+  install -m 0644 "$APP_DIR/deploy/icpaas-recording-uploader.service" /etc/systemd/system/icpaas-recording-uploader.service
+  install -m 0644 "$APP_DIR/deploy/icpaas-recording-uploader.timer" /etc/systemd/system/icpaas-recording-uploader.timer
+  systemctl daemon-reload
+  systemctl enable --now icpaas-recording-uploader.timer
+  say 'Recording uploader installed; verify with systemctl status icpaas-recording-uploader.timer'
+}
 case "${1:-}" in
   install) install;; doctor) doctor;; backup) backup;; restore) shift; restore "${1:-}";; update) update;;
-  *) printf '%s\n' 'Usage: scripts/icpaas {install|doctor|backup|restore <archive>|update}'; exit 2;;
+  install-recording-uploader) shift; install_recording_uploader "${1:-}";;
+  *) printf '%s\n' 'Usage: scripts/icpaas {install|doctor|backup|restore <archive>|update|install-recording-uploader <api-url>}'; exit 2;;
 esac

@@ -205,7 +205,14 @@ X-ICPaaS-Node-Key: <node key>
 Content-Type: audio/wav
 ```
 
-The request is rejected above 50 MB. In distributed deployments, the telephony-node uploader/hook must be installed and configured to send the completed recording to this endpoint. Browser playback is authorized through the API and does not expose a permanent public object URL.
+The request is rejected above 50 MB. In distributed deployments, install the uploader on every FreeSWITCH/Asterisk recording node:
+
+```bash
+sudo ./scripts/icpaas install-recording-uploader https://control.example.com
+systemctl status icpaas-recording-uploader.timer
+```
+
+The installer uses the API node key from `.env` and runs a systemd-sandboxed uploader every minute. It does not change PBX recording-directory ownership. Successful files are archived under `.uploaded`; files that exhaust ten attempts are moved to `.failed` with the last API response for diagnosis. Browser playback is authorized through the API and does not expose a permanent public object URL.
 
 ## Development and CI
 
@@ -240,7 +247,7 @@ docker compose -f compose.yml config --quiet
 | Inbound queue delivery | Implemented for managed FreeSWITCH path; broader acceptance pending |
 | Dispositions, callbacks and rechurn | Implemented foundation; workload acceptance pending |
 | Live monitor and supervision | Implemented; live acceptance pending |
-| Secure recordings | Implemented foundation; node uploader automation pending |
+| Secure recordings | Implemented with node uploader, retry and quarantine lifecycle |
 | Reporting and analytics | Partial |
 | Billing | Ledger/UI foundation; runtime charging enforcement pending |
 | Native CRM/messaging plugins | Not implemented |
@@ -253,7 +260,7 @@ docker compose -f compose.yml config --quiet
 - No production SIP carrier or WebRTC browser matrix has been acceptance-tested in this repository environment.
 - Predictive pacing does not yet implement statistical answer-rate/abandonment-rate modelling.
 - `ring_all` is stored as a queue strategy, but the current inbound worker reserves one agent per delivery cycle.
-- A distributed telephony node still needs an automatic completed-recording uploader/hook.
+- FreeSWITCH/Asterisk recording directories must be mounted or configured at `/var/lib/icpaas/recordings` for the bundled uploader contract.
 - Recording output is WAV; GSM/Opus archival transcoding and external S3-compatible object storage are pending.
 - IVR, visual call-flow builder, approved prompt/audio library and AI voice-agent execution are pending.
 - DNC scrubbing, consent/quiet-hour policy enforcement, TRAI/DOT workflow evidence and number-change approvals are pending.

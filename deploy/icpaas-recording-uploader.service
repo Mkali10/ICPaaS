@@ -1,0 +1,19 @@
+[Unit]
+Description=ICPaaS completed recording uploader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/icpaas/recording-uploader.env
+ExecStart=/usr/local/bin/icpaas-recording-uploader
+User=root
+Group=root
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/icpaas/recordings
+
+[Install]
+WantedBy=multi-user.target

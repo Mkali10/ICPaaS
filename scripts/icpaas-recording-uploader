@@ -1,0 +1,51 @@
+#!/bin/sh
+set -eu
+
+API_URL=${ICPAAAS_API_URL:-}
+NODE_KEY=${ICPAAAS_NODE_KEY:-}
+RECORDING_DIR=${ICPAAAS_RECORDING_DIR:-/var/lib/icpaas/recordings}
+ARCHIVE_DIR=${ICPAAAS_RECORDING_ARCHIVE_DIR:-$RECORDING_DIR/.uploaded}
+FAILED_DIR=${ICPAAAS_RECORDING_FAILED_DIR:-$RECORDING_DIR/.failed}
+MIN_AGE_SECONDS=${ICPAAAS_RECORDING_MIN_AGE_SECONDS:-15}
+MAX_ATTEMPTS=${ICPAAAS_RECORDING_MAX_ATTEMPTS:-10}
+
+log(){ printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+die(){ log "ERROR: $*" >&2; exit 1; }
+uuid(){ printf '%s' "$1" | grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'; }
+
+[ -n "$API_URL" ] || die 'ICPAAAS_API_URL is required'
+[ -n "$NODE_KEY" ] || die 'ICPAAAS_NODE_KEY is required'
+[ -d "$RECORDING_DIR" ] || die "recording directory not found: $RECORDING_DIR"
+command -v curl >/dev/null 2>&1 || die 'curl is required'
+mkdir -p "$ARCHIVE_DIR" "$FAILED_DIR"
+
+now=$(date +%s)
+find "$RECORDING_DIR" -mindepth 2 -maxdepth 2 -type f -name '*.wav' ! -path "$ARCHIVE_DIR/*" ! -path "$FAILED_DIR/*" -print | while IFS= read -r file; do
+  modified=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file")
+  [ $((now-modified)) -ge "$MIN_AGE_SECONDS" ] || continue
+  recording_id=$(basename "$file" .wav)
+  uuid "$recording_id" || { log "skip unrecognised recording name: $file"; continue; }
+  tenant=$(basename "$(dirname "$file")")
+  attempts_file="$file.attempts"
+  attempts=0; [ ! -f "$attempts_file" ] || attempts=$(sed -n '1p' "$attempts_file")
+  case "$attempts" in ''|*[!0-9]*) attempts=0;; esac
+  attempts=$((attempts+1)); printf '%s\n' "$attempts" >"$attempts_file"
+  response="$file.response"
+  code=$(curl --silent --show-error --output "$response" --write-out '%{http_code}' --request PUT \
+    --header "X-ICPaaS-Node-Key: $NODE_KEY" --header 'Content-Type: audio/wav' \
+    --data-binary "@$file" "$API_URL/internal/recordings/$recording_id" || printf '000')
+  if [ "$code" = 200 ]; then
+    mkdir -p "$ARCHIVE_DIR/$tenant"
+    mv "$file" "$ARCHIVE_DIR/$tenant/$recording_id.wav"
+    rm -f "$attempts_file" "$response"
+    log "uploaded recording $recording_id"
+  elif [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
+    mkdir -p "$FAILED_DIR/$tenant"
+    mv "$file" "$FAILED_DIR/$tenant/$recording_id.wav"
+    mv "$response" "$FAILED_DIR/$tenant/$recording_id.response" 2>/dev/null || true
+    rm -f "$attempts_file"
+    log "quarantined recording $recording_id after $attempts attempts (HTTP $code)"
+  else
+    log "upload attempt $attempts failed for $recording_id (HTTP $code)"
+  fi
+done
