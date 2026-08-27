@@ -34,6 +34,14 @@ public sealed class ManagedTelephonyService(PlatformStore store,ILoggerFactory l
             default:throw new ArgumentException("Unknown action");
         }
     }
+    public async Task<OriginateResult> OriginateAgent(Guid tenant,Guid callId,string extension,string trunkKey,string engineKey,CancellationToken ct)
+    {
+        var binding=await Resolve(tenant,"control",trunkKey,engineKey,ct);var engine=(await Adapter(binding,ct)).Engine;
+        var request=new CallRequest(callId,tenant,extension,extension,null,null,engineKey,trunkKey,1);
+        return engine is FreeSwitchEngine fs?await fs.OriginateEndpointAsync(request,$"user/{extension}",ct):throw new NotSupportedException("Managed browser-agent delivery currently requires FreeSWITCH");
+    }
+    public async Task Bridge(Guid tenant,CallRef customer,CallRef agent,string trunkKey,CancellationToken ct)
+    {var binding=await Resolve(tenant,"control",trunkKey,customer.EngineKey,ct);var engine=(await Adapter(binding,ct)).Engine;await engine.BridgeAsync(customer,agent,ct);}
     async Task<Binding> Resolve(Guid tenant,string destination,string? requested,string? engineKey,CancellationToken ct)
     {
         await using var c=await store.Open(ct);

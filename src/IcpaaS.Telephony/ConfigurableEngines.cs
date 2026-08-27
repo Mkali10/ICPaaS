@@ -35,6 +35,14 @@ public sealed class FreeSwitchEngine : ConfigurableEngine
         return new(new(request.PlatformCallId, EngineKey, callId.ToString()), "accepted", DateTimeOffset.UtcNow);
     }
 
+    public async Task<OriginateResult> OriginateEndpointAsync(CallRequest request,string endpoint,CancellationToken ct)
+    {
+        Valid(request);var callId=Guid.NewGuid();var target=Safe(endpoint,"agent endpoint");
+        var variables=$"origination_uuid={callId},icpaas_call_id={request.PlatformCallId}";
+        var reply=await connection.ExecuteCommandAsync($"originate {{{variables}}}{target} &park()",ct);Check(reply);
+        return new(new(request.PlatformCallId,EngineKey,callId.ToString()),"accepted",DateTimeOffset.UtcNow);
+    }
+
     public override Task AnswerAsync(CallRef call, CancellationToken ct) => Act($"uuid_answer {Id(call)}", ct);
     public override Task HangupAsync(CallRef call, string reason, CancellationToken ct) =>
         Act($"uuid_kill {Id(call)} {Safe(reason, "hangup reason")}", ct);
@@ -44,6 +52,8 @@ public sealed class FreeSwitchEngine : ConfigurableEngine
         Act($"uuid_send_dtmf {Id(call)} {Safe(digits, "DTMF")}", ct);
     public override Task TransferAsync(CallRef call, TransferRequest request, CancellationToken ct) =>
         Act($"uuid_transfer {Id(call)} {Safe(request.Destination, "transfer destination")}", ct);
+    public override Task BridgeAsync(CallRef first,CallRef second,CancellationToken ct)=>
+        Act($"uuid_bridge {Id(first)} {Id(second)}",ct);
     public override IAsyncEnumerable<TelephonyEvent> SubscribeAsync(CancellationToken ct) =>
         connection.SubscribeAsync(ct);
 
