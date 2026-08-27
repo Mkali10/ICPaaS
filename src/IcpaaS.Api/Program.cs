@@ -12,7 +12,7 @@ using System.Threading.RateLimiting;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 2 * 1024 * 1024);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 52 * 1024 * 1024);
 builder.Services.AddOptions<PlatformOptions>()
     .Bind(builder.Configuration.GetSection(PlatformOptions.SectionName))
     .Validate(options => new[] { "auto", "demo", "standalone", "application", "telephony-node", "distributed", "hybrid" }.Contains(options.Deployment.Profile), "Invalid deployment profile")
@@ -27,6 +27,7 @@ builder.Services.AddHostedService<CampaignExecutionWorker>();
 builder.Services.AddHostedService<AgentDeliveryWorker>();
 builder.Services.AddHostedService<InboundQueueWorker>();
 builder.Services.AddHostedService<CallLegLifecycleWorker>();
+builder.Services.AddHostedService<RecordingWorker>();
 builder.Services.AddHostedService<ProvisioningWorker>();
 builder.Services.AddHttpClient("plugins",client=>client.Timeout=TimeSpan.FromSeconds(15));
 builder.Services.AddHostedService<PluginDeliveryWorker>();
@@ -79,6 +80,7 @@ app.MapPost("/api/v1/auth/refresh",async(RefreshRequest b,AuthService auth,Cance
 app.MapPost("/api/v1/auth/recover-platform-admin",async(AdminRecoveryRequest b,HttpRequest request,AuthService auth,CancellationToken ct)=>{await auth.ResetPlatformAdmin(b,request.Headers["X-ICPaaS-Bootstrap-Key"].ToString(),ct);return Results.NoContent();}).RequireRateLimiting("auth");
 app.MapContactCenter();app.MapContactCenterLifecycle();app.MapInfrastructureAdmin();app.MapManagement();app.MapOperations();app.MapIntegrations();app.MapUsers();app.MapReseller();app.MapNodeEndpoints();app.MapProvisioning();
 app.MapSupervisor();
+app.MapRecordings();
 
 app.MapFallbackToFile("index.html");
 app.Run();

@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
-    volumes: ["./data/keys:/home/app/.aspnet/DataProtection-Keys"]
+    volumes: ["./data/keys:/home/app/.aspnet/DataProtection-Keys", "./data/recordings:/var/lib/icpaas/recordings"]
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     depends_on:
       migrate:

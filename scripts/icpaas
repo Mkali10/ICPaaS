@@ -70,8 +70,8 @@ install(){
     for key in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD; do [ -n "$(value "$key")" ] || die "$key is required"; done
   fi
   bundle_sipjs
-  mkdir -p "$APP_DIR/data/keys" "$BACKUP_ROOT"; chmod 700 "$APP_DIR/data" "$APP_DIR/data/keys" "$BACKUP_ROOT"
-  chown 1654:1654 "$APP_DIR/data/keys" || die "cannot assign API key-directory ownership"
+  mkdir -p "$APP_DIR/data/keys" "$APP_DIR/data/recordings" "$BACKUP_ROOT"; chmod 700 "$APP_DIR/data" "$APP_DIR/data/keys" "$APP_DIR/data/recordings" "$BACKUP_ROOT"
+  chown -R 1654:1654 "$APP_DIR/data/keys" "$APP_DIR/data/recordings" || die "cannot assign API data-directory ownership"
   args=$(profiles)
   # shellcheck disable=SC2086
   dc $args build api
