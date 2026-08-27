@@ -42,6 +42,8 @@ public sealed class ManagedTelephonyService(PlatformStore store,ILoggerFactory l
     }
     public async Task Bridge(Guid tenant,CallRef customer,CallRef agent,string trunkKey,CancellationToken ct)
     {var binding=await Resolve(tenant,"control",trunkKey,customer.EngineKey,ct);var engine=(await Adapter(binding,ct)).Engine;await engine.BridgeAsync(customer,agent,ct);}
+    public async Task<OriginateResult> Supervise(Guid tenant,Guid sessionId,string extension,CallRef target,string mode,string trunkKey,CancellationToken ct)
+    {var binding=await Resolve(tenant,"control",trunkKey,target.EngineKey,ct);var engine=(await Adapter(binding,ct)).Engine;var request=new CallRequest(sessionId,tenant,extension,extension,null,null,target.EngineKey,trunkKey,1);return engine switch{FreeSwitchEngine fs=>await fs.OriginateSupervisionAsync(request,$"user/{extension}",target,mode,ct),AsteriskEngine ari=>await ari.OriginateSupervisionAsync(request,$"PJSIP/{extension}",target,mode,ct),_=>throw new NotSupportedException("Supervision requires FreeSWITCH or Asterisk")};}
     async Task<Binding> Resolve(Guid tenant,string destination,string? requested,string? engineKey,CancellationToken ct)
     {
         await using var c=await store.Open(ct);
