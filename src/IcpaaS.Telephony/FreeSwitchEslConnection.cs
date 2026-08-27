@@ -170,7 +170,8 @@ public sealed class FreeSwitchEslConnection : BackgroundService
             if (split > 0)
                 values[line[..split].Trim()] = Uri.UnescapeDataString(line[(split + 1)..].Trim().Replace("+", "%20"));
         }
-        var idText = Get(values, "variable_icpaas_call_id") ?? Get(values, "variable_platform_call_id");
+        var managed = string.Equals(Get(values, "variable_icpaas_managed"), "true", StringComparison.OrdinalIgnoreCase);
+        var idText = Get(values, "variable_icpaas_call_id") ?? Get(values, "variable_platform_call_id") ?? (managed ? Get(values, "Unique-ID") : null);
         if (!Guid.TryParse(idText, out var id)) return null;
         var name = Get(values, "Event-Name") ?? "UNKNOWN";
         var attributes = new Dictionary<string, string>();
@@ -178,6 +179,7 @@ public sealed class FreeSwitchEslConnection : BackgroundService
         Add(attributes, "direction", Get(values, "Call-Direction"));
         Add(attributes, "callerId", Get(values, "Caller-Caller-ID-Number"));
         Add(attributes, "destination", Get(values, "Caller-Destination-Number"));
+        Add(attributes, "managed", managed ? "true" : null);
         Add(attributes, "hangupCause", Get(values, "Hangup-Cause"));
         Add(attributes, "dtmfDigit", Get(values, "DTMF-Digit"));
         return new(id, "freeswitch", Normalize(name), DateTimeOffset.UtcNow, attributes);

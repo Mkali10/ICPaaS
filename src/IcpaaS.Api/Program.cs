@@ -25,6 +25,7 @@ builder.Services.AddSingleton<CallEventSink>();
 builder.Services.AddSingleton<ManagedTelephonyService>();
 builder.Services.AddHostedService<CampaignExecutionWorker>();
 builder.Services.AddHostedService<AgentDeliveryWorker>();
+builder.Services.AddHostedService<InboundQueueWorker>();
 builder.Services.AddHostedService<ProvisioningWorker>();
 builder.Services.AddHttpClient("plugins",client=>client.Timeout=TimeSpan.FromSeconds(15));
 builder.Services.AddHostedService<PluginDeliveryWorker>();

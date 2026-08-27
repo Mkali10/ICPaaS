@@ -22,7 +22,11 @@ public sealed class CallEventSink(PlatformStore store,CapacityService capacity,I
         await using var find=new NpgsqlCommand("SELECT tenant_id,campaign_id,process_id,answered_at,ended_at FROM calls WHERE id=$1 FOR UPDATE",connection,transaction);
         find.Parameters.AddWithValue(item.PlatformCallId);
         await using var reader=await find.ExecuteReaderAsync(ct);
-        if(!await reader.ReadAsync(ct)){await reader.CloseAsync();await transaction.RollbackAsync(ct);return false;}
+        if(!await reader.ReadAsync(ct))
+        {
+            await reader.CloseAsync();await transaction.RollbackAsync(ct);
+            return await RegisterInbound(item,ct);
+        }
         var tenant=reader.GetGuid(0);var campaign=reader.IsDBNull(1)?(Guid?)null:reader.GetGuid(1);var process=reader.IsDBNull(2)?(Guid?)null:reader.GetGuid(2);
         var answered=!reader.IsDBNull(3);var ended=!reader.IsDBNull(4);await reader.CloseAsync();
         if(ended){await transaction.RollbackAsync(ct);return true;}
@@ -46,6 +50,25 @@ public sealed class CallEventSink(PlatformStore store,CapacityService capacity,I
         }
         await transaction.CommitAsync(ct);
         if(state=="ended")await capacity.Release(tenant,item.PlatformCallId,ct);
+        return true;
+    }
+
+    async Task<bool> RegisterInbound(TelephonyEvent item,CancellationToken ct)
+    {
+        if(item.EventType is not ("call.created" or "call.ringing")||!item.Attributes.TryGetValue("direction",out var direction)||direction!="inbound")return false;
+        if(!item.Attributes.TryGetValue("destination",out var did)||string.IsNullOrWhiteSpace(did))return false;
+        var caller=item.Attributes.TryGetValue("callerId",out var source)?source:null;
+        var engineCall=item.Attributes.TryGetValue("engineCallId",out var engineId)?engineId:item.PlatformCallId.ToString();
+        await using var c=await store.Open(ct);
+        const string sql=@"INSERT INTO calls(id,tenant_id,process_id,route_id,trunk_id,engine_type,engine_node_id,engine_call_id,direction,from_number,to_number,state,selection_reason,metadata)
+SELECT $1,r.tenant_id,r.process_id,r.id,t.id,n.engine_type,n.id,$2,'inbound',$3,d.number_e164,'queued',t.trunk_key,jsonb_build_object('queue','waiting')
+FROM dids d JOIN routes r ON r.did_id=d.id JOIN processes p ON p.id=r.process_id JOIN trunks t ON t.id=r.primary_trunk_id JOIN telephony_nodes n ON n.id=t.node_id
+WHERE d.number_e164=$4 AND d.enabled AND r.enabled AND r.route_type='inbound' AND p.enabled AND p.process_type IN('inbound','blended') AND t.enabled AND n.enabled
+ORDER BY r.priority LIMIT 1 ON CONFLICT(id) DO NOTHING RETURNING tenant_id,process_id";
+        await using var insert=new NpgsqlCommand(sql,c);Add(insert,item.PlatformCallId,engineCall,caller,did);
+        await using var r=await insert.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))return false;var tenant=r.GetGuid(0);var process=r.GetGuid(1);await r.CloseAsync();
+        try{await capacity.Reserve(tenant,item.PlatformCallId,process,ct);}
+        catch(Exception e){await using var fail=new NpgsqlCommand("UPDATE calls SET state='ended',ended_at=now(),hangup_cause=$2 WHERE id=$1",c);Add(fail,item.PlatformCallId,e.Message[..Math.Min(500,e.Message.Length)]);await fail.ExecuteNonQueryAsync(ct);logger.LogWarning(e,"Inbound capacity rejected call {CallId}",item.PlatformCallId);}
         return true;
     }
 
