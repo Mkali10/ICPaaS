@@ -16,7 +16,7 @@ jobs:
       - run: dotnet restore ICPaaS.sln
       - run: dotnet build ICPaaS.sln -c Release --no-restore
       - name: Validate release tooling
-        run: sh -n scripts/icpaas && sh -n scripts/migrate.sh
+        run: sh -n scripts/icpaas && sh -n scripts/icpaas-recording-uploader && sh -n scripts/migrate.sh
   compose:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +34,6 @@ jobs:
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
       - name: Verify all migrations applied once
-        run: test "$(POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml exec -T postgres psql -p 55432 -U icpaas -d icpaas -Atc 'SELECT count(*) FROM schema_migrations')" = "6"
+        run: test "$(POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml exec -T postgres psql -p 55432 -U icpaas -d icpaas -Atc 'SELECT count(*) FROM schema_migrations')" = "7"
       - if: always()
         run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone down -v

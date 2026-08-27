@@ -10,6 +10,7 @@ public sealed class CampaignExecutionWorker(
     CapacityService capacity,
     ILogger<CampaignExecutionWorker> logger) : BackgroundService
 {
+    DateTimeOffset nextComplianceSweep=DateTimeOffset.MinValue;
     sealed record Campaign(Guid Id, Guid TenantId, Guid ProcessId, string Mode, decimal Cps, int Channels,
         int MaxAttempts, int RetryMinutes, string? CallerId, int AvailableAgents, int ActiveCalls, int RecentCalls);
     sealed record Reservation(Guid ContactId, string Destination, Guid? AgentId, int Attempt);
@@ -21,6 +22,7 @@ public sealed class CampaignExecutionWorker(
             try
             {
                 await ReleaseWrapUpAgents(stoppingToken);
+                if(DateTimeOffset.UtcNow>=nextComplianceSweep){await ApplyComplianceBlocks(stoppingToken);nextComplianceSweep=DateTimeOffset.UtcNow.AddSeconds(5);}
                 foreach (var campaign in await RunnableCampaigns(stoppingToken))
                     await Dispatch(campaign, stoppingToken);
             }
@@ -60,6 +62,10 @@ JOIN tenant_settings ts ON ts.tenant_id=c.tenant_id
 LEFT JOIN dids d ON d.id=p.did_id AND d.enabled
 WHERE c.state='running' AND (c.scheduled_at IS NULL OR c.scheduled_at<=now())
   AND c.dialer_mode IN('progressive','predictive','agentless')
+  AND extract(isodow FROM now() AT TIME ZONE p.calling_timezone)::smallint=ANY(p.calling_days)
+  AND (CASE WHEN p.calling_start<p.calling_end
+       THEN (now() AT TIME ZONE p.calling_timezone)::time>=p.calling_start AND (now() AT TIME ZONE p.calling_timezone)::time<p.calling_end
+       ELSE (now() AT TIME ZONE p.calling_timezone)::time>=p.calling_start OR (now() AT TIME ZONE p.calling_timezone)::time<p.calling_end END)
 ORDER BY c.started_at NULLS LAST,c.created_at";
         await using var command = new NpgsqlCommand(sql, connection);
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -97,13 +103,16 @@ ORDER BY c.started_at NULLS LAST,c.created_at";
         const string sql = @"
 WITH candidate AS (
  SELECT cc.contact_id
- FROM campaign_contacts cc JOIN contacts x ON x.id=cc.contact_id JOIN campaigns live ON live.id=cc.campaign_id
+ FROM campaign_contacts cc JOIN contacts x ON x.id=cc.contact_id JOIN campaigns live ON live.id=cc.campaign_id JOIN processes proc ON proc.id=live.process_id
  WHERE cc.campaign_id=$1
    AND live.state='running'
    AND ((cc.state='queued' AND (x.next_callback_at IS NULL OR x.next_callback_at<=now()))
         OR (cc.state IN('callback','failed') AND x.next_callback_at<=now())
         OR (cc.state='reserved' AND cc.updated_at<now()-interval '2 minutes'))
    AND cc.attempts<$2
+   AND (NOT proc.require_consent OR x.consent_status='granted')
+   AND x.consent_status<>'revoked'
+   AND NOT EXISTS(SELECT 1 FROM tenant_dnc d WHERE d.tenant_id=live.tenant_id AND d.phone_normalized=regexp_replace(x.phone_number,'[^0-9]','','g') AND (d.expires_at IS NULL OR d.expires_at>now()))
  ORDER BY CASE WHEN cc.state='callback' THEN 0 ELSE 1 END,x.next_callback_at NULLS LAST,cc.queued_at
  FOR UPDATE OF cc SKIP LOCKED LIMIT 1
 ), available_agent AS (
@@ -133,6 +142,25 @@ SELECT cl.contact_id,x.phone_number,cl.assigned_agent_id,cl.attempts FROM claime
         }
         await transaction.CommitAsync(ct);
         return result;
+    }
+
+    async Task ApplyComplianceBlocks(CancellationToken ct)
+    {
+        await using var connection=await store.Open(ct);await using var transaction=await connection.BeginTransactionAsync(ct);
+        const string candidate=@"CREATE TEMP TABLE compliance_blocked ON COMMIT DROP AS
+SELECT cc.campaign_id,cc.contact_id,ca.tenant_id,
+ CASE WHEN EXISTS(SELECT 1 FROM tenant_dnc d WHERE d.tenant_id=ca.tenant_id AND d.phone_normalized=regexp_replace(x.phone_number,'[^0-9]','','g') AND (d.expires_at IS NULL OR d.expires_at>now())) THEN 'dnc'
+      WHEN x.consent_status='revoked' THEN 'consent_revoked'
+      ELSE 'consent_missing' END rule
+FROM campaign_contacts cc JOIN campaigns ca ON ca.id=cc.campaign_id JOIN processes p ON p.id=ca.process_id JOIN contacts x ON x.id=cc.contact_id
+WHERE ca.state='running' AND cc.state IN('queued','callback','reserved') AND
+ (EXISTS(SELECT 1 FROM tenant_dnc d WHERE d.tenant_id=ca.tenant_id AND d.phone_normalized=regexp_replace(x.phone_number,'[^0-9]','','g') AND (d.expires_at IS NULL OR d.expires_at>now()))
+  OR x.consent_status='revoked' OR (p.require_consent AND x.consent_status<>'granted'))";
+        await using(var make=new NpgsqlCommand(candidate,connection,transaction)){await make.ExecuteNonQueryAsync(ct);}
+        await using(var audit=new NpgsqlCommand("INSERT INTO dialing_compliance_events(tenant_id,campaign_id,contact_id,rule,decision,detail) SELECT tenant_id,campaign_id,contact_id,rule,'blocked',jsonb_build_object('source','campaign_worker') FROM compliance_blocked",connection,transaction)){await audit.ExecuteNonQueryAsync(ct);}
+        await using(var release=new NpgsqlCommand("UPDATE agent_presence ap SET state='available',last_state_at=now() FROM campaign_contacts cc JOIN compliance_blocked b ON b.campaign_id=cc.campaign_id AND b.contact_id=cc.contact_id WHERE cc.assigned_agent_id=ap.user_id AND ap.tenant_id=b.tenant_id AND ap.state='reserved'",connection,transaction)){await release.ExecuteNonQueryAsync(ct);}
+        await using(var block=new NpgsqlCommand("UPDATE campaign_contacts cc SET state='skipped',assigned_agent_id=NULL,last_error='Compliance block: '||b.rule,updated_at=now() FROM compliance_blocked b WHERE cc.campaign_id=b.campaign_id AND cc.contact_id=b.contact_id",connection,transaction)){await block.ExecuteNonQueryAsync(ct);}
+        await transaction.CommitAsync(ct);
     }
 
     async Task Originate(Campaign campaign, Reservation reservation, CancellationToken ct)

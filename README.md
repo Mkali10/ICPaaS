@@ -67,6 +67,8 @@ Tenant
 - Campaign counters and lead drill-down.
 - Callback-aware lead selection.
 - Disposition-selected rechurn jobs with duplicate-safe target seeding.
+- Tenant DNC suppression, consent metadata and process-specific calling windows.
+- Worker and manual-dial compliance checks with auditable block decisions.
 
 ### Agent workspace
 
@@ -248,6 +250,7 @@ docker compose -f compose.yml config --quiet
 | Dispositions, callbacks and rechurn | Implemented foundation; workload acceptance pending |
 | Live monitor and supervision | Implemented; live acceptance pending |
 | Secure recordings | Implemented with node uploader, retry and quarantine lifecycle |
+| DNC, consent and calling-hour enforcement | Implemented foundation; regulatory policy review required |
 | Reporting and analytics | Partial |
 | Billing | Ledger/UI foundation; runtime charging enforcement pending |
 | Native CRM/messaging plugins | Not implemented |
@@ -263,7 +266,7 @@ docker compose -f compose.yml config --quiet
 - FreeSWITCH/Asterisk recording directories must be mounted or configured at `/var/lib/icpaas/recordings` for the bundled uploader contract.
 - Recording output is WAV; GSM/Opus archival transcoding and external S3-compatible object storage are pending.
 - IVR, visual call-flow builder, approved prompt/audio library and AI voice-agent execution are pending.
-- DNC scrubbing, consent/quiet-hour policy enforcement, TRAI/DOT workflow evidence and number-change approvals are pending.
+- DNC, consent and calling-window enforcement is implemented; jurisdiction-specific TRAI/DOT policy review, workflow evidence and number-change approvals remain pending.
 - Native WhatsApp, SMS, Zoho, Odoo, Salesforce and payment/appointment plugins are pending; current integrations are generic webhook foundations.
 - Billing balances are not yet debited by live usage and do not currently block calls automatically.
 - Advanced reports, scheduled exports, wallboards and recording-quality analytics are pending.
