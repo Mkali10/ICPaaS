@@ -8,5 +8,5 @@
   document.querySelector('#monitor-refresh').onclick=supervisorMonitor;
   document.querySelectorAll('.supervise').forEach(b=>b.onclick=async()=>{const extension=document.querySelector('#supervisor-extension').value;if(!extension){alert('Select the supervisor phone extension first.');return}b.disabled=true;try{await post(`/supervisor/calls/${b.dataset.call}/supervise`,{extension,mode:b.dataset.mode});alert(`${b.dataset.mode} session is ringing on extension ${extension}.`)}catch(e){alert(e.message)}finally{b.disabled=false}});
   document.querySelectorAll('.monitor-hangup').forEach(b=>b.onclick=async()=>{if(!confirm('End this live call?'))return;b.disabled=true;try{await post(`/supervisor/calls/${b.dataset.call}/hangup`,{});await supervisorMonitor()}catch(e){alert(e.message);b.disabled=false}});
- }catch(e){shell('Live supervisor',e.message,`<section class="panel error-panel"><strong>Unable to load live state</strong><p>${esc(e.message)}</p><button class="secondary" onclick="show('monitor')">Try again</button></section>`)}}
+ }catch(e){shell('Live supervisor',e.message,`<section class="panel error-panel"><strong>Unable to load live state</strong><p>${esc(e.message)}</p><button class="secondary" data-go-view="monitor">Try again</button></section>`)}}
 })();
