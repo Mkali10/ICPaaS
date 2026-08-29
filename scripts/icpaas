@@ -87,7 +87,9 @@ install(){
   doctor; say 'Installation completed'
 }
 backup(){
-  need docker; need sha256sum; prepare_env; mkdir -p "$BACKUP_ROOT"; chmod 700 "$BACKUP_ROOT"
+  need docker; need sha256sum; prepare_env
+  mkdir -p "$BACKUP_ROOT" "$APP_DIR/data/keys" "$APP_DIR/data/recordings"
+  chmod 700 "$BACKUP_ROOT"
   pg_port=$(value POSTGRES_PORT); [ -n "$pg_port" ] || pg_port=55432
   db_profile=$(value ICPaaS__Deployment__Profile); [ "$db_profile" != auto ] || db_profile=standalone
   stamp=$(date -u +%Y%m%dT%H%M%SZ); work=$(mktemp -d); trap 'rm -rf "$work"' EXIT HUP INT TERM

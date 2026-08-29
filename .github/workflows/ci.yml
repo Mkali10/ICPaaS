@@ -34,7 +34,7 @@ jobs:
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
       - run: POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml --profile standalone run --rm migrate
       - name: Verify backup archive contract
-        run: mkdir -p data/keys data/recordings && POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid ./scripts/icpaas backup && POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid ./scripts/icpaas verify-backup "$(find backups -maxdepth 1 -type f -name 'icpaas-*.tar.gz' | head -1)"
+        run: rm -rf data/recordings && mkdir -p data/keys && POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid ./scripts/icpaas backup && POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid ./scripts/icpaas verify-backup "$(find backups -maxdepth 1 -type f -name 'icpaas-*.tar.gz' | head -1)"
       - name: Verify all migrations applied once
         run: test "$(POSTGRES_PASSWORD=test REDIS_PASSWORD=test TURN_SHARED_SECRET=test TURN_REALM=turn.invalid docker compose -f compose.yml exec -T postgres psql -p 55432 -U icpaas -d icpaas -Atc 'SELECT count(*) FROM schema_migrations')" = "7"
       - if: always()
