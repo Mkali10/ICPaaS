@@ -27,16 +27,16 @@ token=$(printf '%s' "$login"|jq -r .accessToken);[ -n "$token" ]&&[ "$token" != 
 auth(){ curl -fsS -H "Authorization: Bearer $token" "$@"; }
 me=$(auth "$API_URL/api/v1/me")||fail '/me failed';tenant=$(printf '%s' "$me"|jq -r '.tenantId // empty');pass 'session and role claims'
 caps=$(auth "$API_URL/api/v1/system/capabilities")||fail 'capability endpoint failed';printf '%s' "$caps"|jq -e . >/dev/null;pass 'platform capability report'
-auth "$API_URL/api/v1/agents"|jq -e . >/dev/null||fail 'agent endpoint list failed';pass 'agent endpoint API'
-auth "$API_URL/api/v1/contact-center/processes"|jq -e . >/dev/null||fail 'process API failed';pass 'process configuration API'
-auth "$API_URL/api/v1/contact-center/campaigns"|jq -e . >/dev/null||fail 'campaign API failed';pass 'campaign execution API'
+agents=$(auth "$API_URL/api/v1/agents")||fail 'agent endpoint list failed';printf '%s' "$agents"|jq -e . >/dev/null||fail 'invalid agent endpoint response';pass 'agent endpoint API'
+processes=$(auth "$API_URL/api/v1/contact-center/processes")||fail 'process API failed';printf '%s' "$processes"|jq -e . >/dev/null||fail 'invalid process response';pass 'process configuration API'
+campaigns=$(auth "$API_URL/api/v1/contact-center/campaigns")||fail 'campaign API failed';printf '%s' "$campaigns"|jq -e . >/dev/null||fail 'invalid campaign response';pass 'campaign execution API'
 from=$(date -u -d '30 days ago' +%Y-%m-%dT00:00:00Z 2>/dev/null||date -u -v-30d +%Y-%m-%dT00:00:00Z)
 to=$(date -u +%Y-%m-%dT23:59:59Z)
-auth "$API_URL/api/v1/reports/summary?from=$from&to=$to"|jq -e .totals >/dev/null||fail 'report API failed';pass 'report query and tenant isolation'
+report=$(auth "$API_URL/api/v1/reports/summary?from=$from&to=$to")||fail 'report API failed';printf '%s' "$report"|jq -e .totals >/dev/null||fail 'invalid report response';pass 'report query and tenant isolation'
 if [ -n "$DESTINATION" ];then
  [ -n "$tenant" ]||fail 'tenant ID unavailable for test call'
  call=$(jq -n --arg tenant "$tenant" --arg destination "$DESTINATION" --arg caller "$CALLER_ID" '{tenantId:$tenant,destination:$destination,callerId:(if ($caller|length)>0 then $caller else null end),engineKey:null,trunkKey:null}')
- curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' --data "$call" "$API_URL/api/v1/telephony/test-call"|jq -e . >/dev/null||fail 'managed SIP test call failed';pass 'managed SIP originate accepted'
+ call_response=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' --data "$call" "$API_URL/api/v1/telephony/test-call")||fail 'managed SIP test call failed';printf '%s' "$call_response"|jq -e . >/dev/null||fail 'invalid managed SIP response';pass 'managed SIP originate accepted'
 else
  printf '%s\n' '[SKIP] Real SIP call (set ICPAAAS_ACCEPTANCE_DESTINATION to enable)'
 fi
