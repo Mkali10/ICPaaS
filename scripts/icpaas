@@ -93,7 +93,7 @@ backup(){
   cp "$ENV_FILE" "$work/environment"; chmod 600 "$work/environment"
   git -C "$APP_DIR" rev-parse HEAD >"$work/git-commit" 2>/dev/null || printf '%s\n' unknown >"$work/git-commit"
   if [ "$(value ICPaaS__Deployment__Profile)" = standalone ]; then
-    dc exec -T -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres pg_dump -h 127.0.0.1 -p "$pg_port" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
+    dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres pg_dump -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
   else
     docker run --rm -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres:17-alpine pg_dump -h "$(value POSTGRES_HOST)" -p "$(value POSTGRES_PORT)" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
   fi
@@ -112,9 +112,9 @@ restore(){
   pg_port=$(value POSTGRES_PORT); [ -n "$pg_port" ] || pg_port=55432
   dc stop api || true
   if [ "$(value ICPaaS__Deployment__Profile)" = standalone ]; then
-    dc exec -T -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres dropdb -h 127.0.0.1 -p "$pg_port" -U "$(value POSTGRES_USER)" --maintenance-db=postgres --if-exists "$(value POSTGRES_DB)"
-    dc exec -T -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres createdb -h 127.0.0.1 -p "$pg_port" -U "$(value POSTGRES_USER)" "$(value POSTGRES_DB)"
-    dc exec -T -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres pg_restore -h 127.0.0.1 -p "$pg_port" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" --clean --if-exists <"$work/database.dump"
+    dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres dropdb -U "$(value POSTGRES_USER)" --maintenance-db=postgres --if-exists "$(value POSTGRES_DB)"
+    dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres createdb -U "$(value POSTGRES_USER)" "$(value POSTGRES_DB)"
+    dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres pg_restore -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" --clean --if-exists <"$work/database.dump"
   else
     docker run --rm -i -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres:17-alpine pg_restore -h "$(value POSTGRES_HOST)" -p "$(value POSTGRES_PORT)" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" --clean --if-exists <"$work/database.dump"
   fi
