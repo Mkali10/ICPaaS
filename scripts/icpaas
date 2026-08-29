@@ -89,10 +89,11 @@ install(){
 backup(){
   need docker; need sha256sum; prepare_env; mkdir -p "$BACKUP_ROOT"; chmod 700 "$BACKUP_ROOT"
   pg_port=$(value POSTGRES_PORT); [ -n "$pg_port" ] || pg_port=55432
+  db_profile=$(value ICPaaS__Deployment__Profile); [ "$db_profile" != auto ] || db_profile=standalone
   stamp=$(date -u +%Y%m%dT%H%M%SZ); work=$(mktemp -d); trap 'rm -rf "$work"' EXIT HUP INT TERM
   cp "$ENV_FILE" "$work/environment"; chmod 600 "$work/environment"
   git -C "$APP_DIR" rev-parse HEAD >"$work/git-commit" 2>/dev/null || printf '%s\n' unknown >"$work/git-commit"
-  if [ "$(value ICPaaS__Deployment__Profile)" = standalone ]; then
+  if [ "$db_profile" = standalone ]; then
     dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres pg_dump -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
   else
     docker run --rm -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres:17-alpine pg_dump -h "$(value POSTGRES_HOST)" -p "$(value POSTGRES_PORT)" -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc >"$work/database.dump"
@@ -110,8 +111,9 @@ restore(){
   (cd "$work" && sha256sum -c SHA256SUMS) || die 'backup integrity verification failed'
   cp "$ENV_FILE" "$ENV_FILE.before-restore-$(date +%s)" 2>/dev/null || true; cp "$work/environment" "$ENV_FILE"; chmod 600 "$ENV_FILE"
   pg_port=$(value POSTGRES_PORT); [ -n "$pg_port" ] || pg_port=55432
+  db_profile=$(value ICPaaS__Deployment__Profile); [ "$db_profile" != auto ] || db_profile=standalone
   dc stop api || true
-  if [ "$(value ICPaaS__Deployment__Profile)" = standalone ]; then
+  if [ "$db_profile" = standalone ]; then
     dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres dropdb -U "$(value POSTGRES_USER)" --maintenance-db=postgres --if-exists "$(value POSTGRES_DB)"
     dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres createdb -U "$(value POSTGRES_USER)" "$(value POSTGRES_DB)"
     dc exec -T -e PGHOST=127.0.0.1 -e PGPORT="$pg_port" -e PGPASSWORD="$(value POSTGRES_PASSWORD)" postgres pg_restore -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" --clean --if-exists <"$work/database.dump"
