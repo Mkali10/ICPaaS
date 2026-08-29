@@ -9,4 +9,5 @@ data/
 secrets/
 certs/
 logs/
-
+src/IcpaaS.Api/wwwroot/vendor/
+backups/
