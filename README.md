@@ -45,6 +45,7 @@ Tenant
 - SIP trunk, DID, primary/failover route and destination-pattern configuration.
 - Node/trunk/DID/route enable-disable lifecycle.
 - Trunk verification, provisioning jobs and managed test calls.
+- Operational console forms for adding DIDs and inbound/outbound routes, selecting primary/failover trunks, changing DID usage and verifying infrastructure.
 - Answer, hangup, hold, resume, DTMF, transfer and bridge controls.
 
 ### Contact-center configuration

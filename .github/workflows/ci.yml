@@ -18,7 +18,7 @@ jobs:
       - name: Validate release tooling
         run: sh -n scripts/icpaas && sh -n scripts/icpaas-recording-uploader && sh -n scripts/acceptance.sh && sh -n scripts/migrate.sh
       - name: Validate frontend policy and syntax
-        run: '! grep -R ''onclick="show'' src/IcpaaS.Api/wwwroot --include="*.js" && node --check src/IcpaaS.Api/wwwroot/app.js && node --check src/IcpaaS.Api/wwwroot/entitlements.js && node --check src/IcpaaS.Api/wwwroot/contact-center.js && node --check src/IcpaaS.Api/wwwroot/supervisor.js && node --check src/IcpaaS.Api/wwwroot/recordings.js && node scripts/access-contract.mjs'
+        run: '! grep -R ''onclick="show'' src/IcpaaS.Api/wwwroot --include="*.js" && node --check src/IcpaaS.Api/wwwroot/app.js && node --check src/IcpaaS.Api/wwwroot/infrastructure-console.js && node --check src/IcpaaS.Api/wwwroot/entitlements.js && node --check src/IcpaaS.Api/wwwroot/contact-center.js && node --check src/IcpaaS.Api/wwwroot/supervisor.js && node --check src/IcpaaS.Api/wwwroot/recordings.js && node scripts/access-contract.mjs'
   compose:
     runs-on: ubuntu-latest
     steps:

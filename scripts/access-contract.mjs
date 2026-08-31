@@ -11,7 +11,7 @@ const exceptionHandler=read('src/IcpaaS.Api/ApiExceptionHandler.cs');
 const requireContract=(condition,message)=>{if(!condition)throw new Error(message)};
 const navViews=new Set([...nav.matchAll(/data-view="([a-z_]+)"/g)].map(x=>x[1]));
 const actionViews=new Set([...app.matchAll(/data-go-view="([a-z_]+)"/g)].map(x=>x[1]));
-const scripts=['app.js','contact-center.js','supervisor.js','recordings.js','entitlements.js'].map(x=>read(`src/IcpaaS.Api/wwwroot/${x}`)).join('\n');
+const scripts=['app.js','infrastructure-console.js','contact-center.js','supervisor.js','recordings.js','entitlements.js'].map(x=>read(`src/IcpaaS.Api/wwwroot/${x}`)).join('\n');
 const buttonIds=new Set([...scripts.matchAll(/<button[^>]*id=["']([^"']+)["']/g)].map(x=>x[1]).filter(x=>!x.includes('${')));
 
 for(const view of actionViews)requireContract(navViews.has(view),`Action targets unknown view: ${view}`);
