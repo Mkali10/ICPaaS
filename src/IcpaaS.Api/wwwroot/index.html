@@ -1,10 +1,94 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ICPaaS Control Plane</title><link rel="stylesheet" href="/styles.css?v=20260829-4"></head><body><div id="auth" class="auth"><form id="login"><div class="brand"><span class="brand-mark">I</span><div><strong>ICPaaS</strong><small>Communications Cloud</small></div></div><h2>Welcome back</h2><p>Sign in to your communications workspace.</p><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="10" required></label><label>Workspace ID <small>(optional; only for duplicate emails)</small><input name="workspace" placeholder="Usually leave blank"></label><button class="primary">Sign in</button><small id="auth-error"></small></form></div><aside><div class="brand"><span class="brand-mark">I</span><div><strong>ICPaaS</strong><small>Communications Cloud</small></div></div><nav id="nav">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ICPaaS Control Plane</title>
+<link rel="stylesheet" href="/styles.css?v=20260829-4">
+</head>
+<body>
+<div id="auth" class="auth">
+<form id="login">
+<div class="brand">
+<span class="brand-mark">I</span>
+<div>
+<strong>ICPaaS</strong>
+<small>Communications Cloud</small>
+</div>
+</div>
+<h2>Welcome back</h2>
+<p>Sign in to your communications workspace.</p>
+<label>Email<input name="email" type="email" required>
+</label>
+<label>Password<input name="password" type="password" minlength="10" required>
+</label>
+<label>Workspace ID <small>(optional; only for duplicate emails)</small>
+<input name="workspace" placeholder="Usually leave blank">
+</label>
+<button class="primary">Sign in</button>
+<small id="auth-error">
+</small>
+</form>
+</div>
+<aside>
+<div class="brand">
+<span class="brand-mark">I</span>
+<div>
+<strong>ICPaaS</strong>
+<small>Communications Cloud</small>
+</div>
+</div>
+<nav id="nav">
 <span class="nav-group" data-group="platform">CONTROL CENTER</span>
-<button data-view="overview" class="active" title="Live workspace summary">Dashboard</button><button data-view="tenants">Customers</button><button data-view="billing">Billing & Credits</button>
+<button data-view="overview" class="active" title="Live workspace summary">Dashboard</button>
+<button data-view="tenants">Customers</button>
+<button data-view="billing">Billing & Credits</button>
 <span class="nav-group" data-group="service">SERVICES</span>
-<button data-view="guide" title="Recommended configuration order">Setup Guide</button><button data-view="quick" title="Add a FreeSWITCH, Asterisk or carrier connection">Add SIP Connection</button><button data-view="nodes" title="Manage telephony nodes and trunks">Telephony Servers & Trunks</button><button data-view="numbers" title="Manage inbound DIDs and outbound caller IDs">Phone Numbers (DIDs)</button><button data-view="routing" title="Map numbers and patterns to trunks and processes">Call Routes</button><button data-view="campaigns" title="Configure queues, processes, data, campaigns and rechurn">Campaign Setup</button><button data-view="monitor" title="Monitor and supervise active calls">Live Calls & Supervision</button><button data-view="desk">Agent Desk</button><button data-view="calls">Calls & Recordings</button>
+<button data-view="guide" title="Recommended configuration order">Setup Guide</button>
+<button data-view="quick" title="Add a FreeSWITCH, Asterisk or carrier connection">Add SIP Connection</button>
+<button data-view="nodes" title="Manage telephony nodes and trunks">Telephony Servers & Trunks</button>
+<button data-view="numbers" title="Manage inbound DIDs and outbound caller IDs">Phone Numbers (DIDs)</button>
+<button data-view="routing" title="Map numbers and patterns to trunks and processes">Call Routes</button>
+<button data-view="campaigns" title="Configure queues, processes, data, campaigns and rechurn">Campaign Setup</button>
+<button data-view="monitor" title="Monitor and supervise active calls">Live Calls & Supervision</button>
+<button data-view="desk">Agent Desk</button>
+<button data-view="calls">Calls & Recordings</button>
 <span class="nav-group" data-group="experience">EXPERIENCE</span>
-<button data-view="team" title="Create users and assign permissions">Team & Permissions</button><button data-view="integrations">Integrations</button><button data-view="quality">Quality & Compliance</button><button data-view="reports">Reports</button>
+<button data-view="team" title="Create users and assign permissions">Team & Permissions</button>
+<button data-view="integrations">Integrations</button>
+<button data-view="quality">Quality & Compliance</button>
+<button data-view="reports">Reports</button>
 <span class="nav-group" data-group="governance">GOVERNANCE</span>
-<button data-view="operations" title="Service health and automation status">System Status</button><button data-view="audit">Audit Trail</button><button data-view="profile">Profile & Security</button>
-</nav><div class="tenant"><span class="dot"></span><div><small>Current workspace</small><strong id="tenant-name">Tenant</strong></div></div></aside><main id="root"><div class="skeleton"></div></main><script src="/vendor/sip-0.21.2.min.js"></script><script src="/app.js?v=20260829-5"></script><script src="/entitlements.js?v=20260829-5"></script><script src="/contact-center.js?v=20260829-5"></script><script src="/supervisor.js?v=20260829-5"></script><script src="/recordings.js?v=20260829-5"></script></body></html>
+<button data-view="operations" title="Service health and automation status">System Status</button>
+<button data-view="audit">Audit Trail</button>
+<button data-view="profile">Profile & Security</button>
+</nav>
+<div class="tenant">
+<span class="dot">
+</span>
+<div>
+<small>Current workspace</small>
+<strong id="tenant-name">Tenant</strong>
+</div>
+</div>
+</aside>
+<main id="root">
+<div class="skeleton">
+</div>
+</main>
+<script src="/vendor/sip-0.21.2.min.js">
+</script>
+<script src="/app.js?v=20260831-1">
+</script>
+<script src="/infrastructure-console.js?v=20260831-1">
+</script>
+<script src="/entitlements.js?v=20260829-5">
+</script>
+<script src="/contact-center.js?v=20260829-5">
+</script>
+<script src="/supervisor.js?v=20260829-5">
+</script>
+<script src="/recordings.js?v=20260829-5">
+</script>
+</body>
+</html>
