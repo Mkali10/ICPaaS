@@ -57,7 +57,7 @@ app.Use(async (context, next) =>
 });
 app.UseStaticFiles();
 app.UseRateLimiter();
-app.UseAuthentication();app.UseAuthorization();
+app.UseAuthentication();app.UseAuthorization();app.Use(EntitlementAccess.Enforce);
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "live", time = DateTimeOffset.UtcNow }));
 app.MapGet("/health/ready", async (CapabilityService service, CancellationToken ct) => Results.Ok(await service.ReadAsync(ct)));

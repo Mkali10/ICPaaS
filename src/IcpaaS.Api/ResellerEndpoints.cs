@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace IcpaaS.Api;
 
-public sealed record TenantControlUpdate(string? Status,string? PlanKey,int? ChannelLimit,decimal? CpsLimit,int? AgentLimit,int? StorageLimitGb,int? RecordingRetentionDays,JsonElement? Branding);
+public sealed record TenantControlUpdate(string? Status,string? PlanKey,int? ChannelLimit,decimal? CpsLimit,int? AgentLimit,int? StorageLimitGb,int? RecordingRetentionDays,string[]? ServiceEntitlements,JsonElement? Branding);
 public sealed record CreditAdjustment(Guid TenantId,decimal Amount,string EntryType,string? Reference,string? Note);
 public sealed record ProcessCreate(string Name,string ProcessType,decimal? MaxCps);
 public sealed record CampaignCreate(Guid ProcessId,string Name,string DialerMode,decimal? MaxCps,int? MaxChannels);
@@ -21,7 +21,7 @@ public static class ResellerEndpoints
         api.MapGet("/platform/tenants/{id:guid}",async(Guid id,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>{
             if(!Platform(u))return Results.Forbid();await using var c=await s.Open(ct);
             await using var q=new NpgsqlCommand(@"SELECT t.id,t.slug,t.name,t.status,t.branding,t.created_at,
-              ts.plan_key,ts.channel_limit,ts.cps_limit,ts.agent_limit,ts.storage_limit_gb,ts.recording_retention_days,
+              ts.plan_key,ts.channel_limit,ts.cps_limit,ts.agent_limit,ts.storage_limit_gb,ts.recording_retention_days,ts.service_entitlements,
               b.currency,b.billing_mode,b.credit_balance,b.credit_limit,b.status billing_status,
               (SELECT count(*) FROM users WHERE tenant_id=t.id) users,
               (SELECT count(*) FROM agent_endpoints WHERE tenant_id=t.id) agents,
@@ -36,7 +36,8 @@ public static class ResellerEndpoints
             if(!Platform(u))return Results.Forbid();await using var c=await s.Open(ct);await using var tx=await c.BeginTransactionAsync(ct);
             if(b.Status is not null){await using var t=new NpgsqlCommand("UPDATE tenants SET status=$2,branding=COALESCE($3::jsonb,branding),updated_at=now() WHERE id=$1",c,tx);Add(t,id,b.Status,b.Branding is null?null:b.Branding.Value.GetRawText());await t.ExecuteNonQueryAsync(ct);}
             else if(b.Branding is not null){await using var t=new NpgsqlCommand("UPDATE tenants SET branding=$2::jsonb,updated_at=now() WHERE id=$1",c,tx);Add(t,id,b.Branding.Value.GetRawText());await t.ExecuteNonQueryAsync(ct);}
-            await using var q=new NpgsqlCommand(@"UPDATE tenant_settings SET plan_key=COALESCE($2,plan_key),channel_limit=COALESCE($3,channel_limit),cps_limit=COALESCE($4,cps_limit),agent_limit=COALESCE($5,agent_limit),storage_limit_gb=COALESCE($6,storage_limit_gb),recording_retention_days=COALESCE($7,recording_retention_days),updated_at=now() WHERE tenant_id=$1",c,tx);Add(q,id,b.PlanKey,b.ChannelLimit,b.CpsLimit,b.AgentLimit,b.StorageLimitGb,b.RecordingRetentionDays);await q.ExecuteNonQueryAsync(ct);await tx.CommitAsync(ct);return Results.NoContent();
+            var allowed=new HashSet<string>{"infrastructure","numbers","routing","campaigns","agent_desk","supervision","recordings","team","integrations","quality","reports","operations","audit"};if(b.ServiceEntitlements is not null&&b.ServiceEntitlements.Any(x=>!allowed.Contains(x)))return Results.BadRequest(new{error="Invalid service entitlement"});
+            await using var q=new NpgsqlCommand(@"UPDATE tenant_settings SET plan_key=COALESCE($2,plan_key),channel_limit=COALESCE($3,channel_limit),cps_limit=COALESCE($4,cps_limit),agent_limit=COALESCE($5,agent_limit),storage_limit_gb=COALESCE($6,storage_limit_gb),recording_retention_days=COALESCE($7,recording_retention_days),service_entitlements=COALESCE($8,service_entitlements),updated_at=now() WHERE tenant_id=$1",c,tx);Add(q,id,b.PlanKey,b.ChannelLimit,b.CpsLimit,b.AgentLimit,b.StorageLimitGb,b.RecordingRetentionDays,b.ServiceEntitlements?.Distinct().ToArray());await q.ExecuteNonQueryAsync(ct);await tx.CommitAsync(ct);return Results.NoContent();
         });
         api.MapGet("/numbers",async(ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>{
             await using var c=await s.Open(ct);var sql=Platform(u)?"SELECT d.id,d.tenant_id,d.number_e164,d.use_for_inbound,d.use_for_outbound_cli,d.enabled,d.ownership_verified_at,t.display_name trunk_name FROM dids d JOIN trunks t ON t.id=d.trunk_id ORDER BY d.created_at DESC":"SELECT d.id,d.tenant_id,d.number_e164,d.use_for_inbound,d.use_for_outbound_cli,d.enabled,d.ownership_verified_at,t.display_name trunk_name FROM dids d JOIN trunks t ON t.id=d.trunk_id WHERE d.tenant_id=$1 ORDER BY d.created_at DESC";await using var q=new NpgsqlCommand(sql,c);if(!Platform(u))q.Parameters.AddWithValue(Tenant(u));return Results.Ok(await Rows(q,ct));

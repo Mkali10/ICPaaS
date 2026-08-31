@@ -1,6 +1,6 @@
 (()=>{
  const previousShow=window.show,previousNavigation=window.applyNavigation;
- window.applyNavigation=function(){previousNavigation();const roles=me?.roles||[],allowed=roles.some(x=>['tenant_owner','tenant_admin','supervisor'].includes(x)),button=document.querySelector('[data-view="monitor"]');if(button)button.hidden=!allowed;if(allowed&&button){let group=button.previousElementSibling;while(group&&!group.classList.contains('nav-group'))group=group.previousElementSibling;if(group)group.hidden=false}};
+ window.applyNavigation=function(){previousNavigation();const roles=me?.roles||[],platform=roles.includes('platform_admin'),allowed=platform||((me?.entitlements||[]).includes('supervision')&&roles.some(x=>['tenant_owner','tenant_admin','supervisor'].includes(x))),button=document.querySelector('[data-view="monitor"]');if(button)button.hidden=!allowed;if(allowed&&button){let group=button.previousElementSibling;while(group&&!group.classList.contains('nav-group'))group=group.previousElementSibling;if(group)group.hidden=false}};
  window.show=async function(view){if(view!=='monitor')return previousShow(view);document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===view));await supervisorMonitor()};
  async function supervisorMonitor(){try{
   const [calls,agents]=await Promise.all([api('/supervisor/live'),api('/supervisor/agents')]),active=agents.filter(x=>['ringing','on_call','reserved'].includes(x.state)).length,extensions=agents.filter(x=>x.extension&&x.endpoint_status!=='disabled');
