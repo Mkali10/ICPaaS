@@ -20,7 +20,6 @@ public static class EntitlementAccess
         ("/api/v1/routes", "routing"),
         ("/api/v1/telephony/test-call", "routing"),
         ("/api/v1/supervisor", "supervision"),
-        ("/api/v1/calls", "recordings"),
         ("/api/v1/recordings", "recordings"),
         ("/api/v1/users", "team"),
         ("/api/v1/plugins", "integrations"),
@@ -36,9 +35,11 @@ public static class EntitlementAccess
         var user=context.User;
         if(user.Identity?.IsAuthenticated!=true||user.IsInRole("platform_admin")){await next(context);return;}
         var path=context.Request.Path;
-        var required=Routes.FirstOrDefault(x=>path.StartsWithSegments(x.Prefix,StringComparison.OrdinalIgnoreCase));
-        if(required.Prefix is null||user.HasClaim("entitlement",required.Entitlement)){await next(context);return;}
+        var entitlement=path.StartsWithSegments("/api/v1/calls",StringComparison.OrdinalIgnoreCase)
+            ? context.Request.Method==HttpMethods.Get?"recordings":"agent_desk"
+            : Routes.FirstOrDefault(x=>path.StartsWithSegments(x.Prefix,StringComparison.OrdinalIgnoreCase)).Entitlement;
+        if(entitlement is null||user.HasClaim("entitlement",entitlement)){await next(context);return;}
         context.Response.StatusCode=StatusCodes.Status403Forbidden;
-        await context.Response.WriteAsJsonAsync(new{error=$"Service '{required.Entitlement}' is not enabled for this workspace."});
+        await context.Response.WriteAsJsonAsync(new{error=$"Service '{entitlement}' is not enabled for this workspace."});
     }
 }

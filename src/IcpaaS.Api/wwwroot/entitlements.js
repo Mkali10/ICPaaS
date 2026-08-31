@@ -24,7 +24,12 @@
   if((!init.method||init.method==='GET')&&/\/api\/v1\/platform\/tenants\/[0-9a-f-]+$/i.test(url)&&response.ok){try{const body=await response.clone().json();window.currentTenantEntitlements=body.service_entitlements||[]}catch{}}
   return response;
  };
+ const pruneUnauthorizedActions=()=>{
+  const permitted=new Set([...document.querySelectorAll('#nav button:not([hidden])')].map(x=>x.dataset.view));
+  document.querySelectorAll('#root [data-go-view]').forEach(button=>{if(!permitted.has(button.dataset.goView))button.hidden=true});
+ };
  const render=()=>{
+  pruneUnauthorizedActions();
   const form=document.querySelector('#limits-form');
   if(!form||form.querySelector('#service-entitlements'))return;
   const selected=new Set(window.currentTenantEntitlements||[]),fieldset=document.createElement('fieldset');
