@@ -5,6 +5,8 @@ const app=read('src/IcpaaS.Api/wwwroot/app.js');
 const nav=read('src/IcpaaS.Api/wwwroot/index.html');
 const supervisor=read('src/IcpaaS.Api/wwwroot/supervisor.js');
 const middleware=read('src/IcpaaS.Api/EntitlementAccess.cs');
+const program=read('src/IcpaaS.Api/Program.cs');
+const exceptionHandler=read('src/IcpaaS.Api/ApiExceptionHandler.cs');
 
 const requireContract=(condition,message)=>{if(!condition)throw new Error(message)};
 const navViews=new Set([...nav.matchAll(/data-view="([a-z_]+)"/g)].map(x=>x[1]));
@@ -24,5 +26,7 @@ requireContract(!app.match(/else if\(tenantAdmin\)allowed=\[[^\]]*'guide'/),'Ten
 requireContract(middleware.includes('context.Request.Method==HttpMethods.Get?"recordings":"agent_desk"'),'Calls must separate history access from call-control access');
 requireContract(supervisor.includes("(me?.entitlements||[]).includes('supervision')"),'Supervisor menu must require entitlement');
 requireContract(!supervisor.includes('allowed=platform||'),'Platform must not enter a tenant supervisor view without tenant context');
+requireContract(program.includes('ApiExceptionHandler.Write'),'API exception mapping must be installed');
+for(const status of ['Status403Forbidden','Status400BadRequest','Status409Conflict','Status500InternalServerError'])requireContract(exceptionHandler.includes(status),`Missing exception response mapping: ${status}`);
 
 console.log(`Access contract OK: ${navViews.size} navigation views, ${actionViews.size} static actions and ${buttonIds.size} button handlers checked.`);

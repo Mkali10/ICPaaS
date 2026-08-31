@@ -27,7 +27,7 @@ public static class IntegrationEndpoints
         });
         group.MapPost("/plugins",async(PluginConfigure body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
-            if(!Admin(user))return Results.Forbid();
+            if(!Admin(user)||user.IsInRole("platform_admin"))return Results.Forbid();
             if(!Supported.Contains(body.PluginKey)||!Endpoint(body.EndpointUrl)||!SecretReference(body.SecretRef)||string.IsNullOrWhiteSpace(body.DisplayName))
                 return Results.BadRequest(new{error="Invalid plugin configuration"});
             var eventNames=(body.Events??[]).Where(x=>Regex.IsMatch(x,"^[a-z][a-z0-9_.-]{1,80}$")).Distinct().Take(50).ToArray();
@@ -41,7 +41,7 @@ RETURNING id,plugin_key,display_name,status,endpoint_url,secret_ref,subscribed_e
         });
         group.MapPost("/plugins/{id:guid}/test",async(Guid id,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
-            if(!Admin(user))return Results.Forbid();await using var connection=await store.Open(ct);
+            if(!Admin(user)||user.IsInRole("platform_admin"))return Results.Forbid();await using var connection=await store.Open(ct);
             await using var command=new NpgsqlCommand("INSERT INTO plugin_deliveries(tenant_id,plugin_id,event_type,payload) SELECT $1,id,'plugin.test',$3::jsonb FROM plugins WHERE id=$2 AND tenant_id=$1 RETURNING id,state,created_at",connection);
             Add(command,Tenant(user),id,PlatformStore.Json(new{message="ICPaaS connection test",sentAt=DateTimeOffset.UtcNow}));
             return await One(command,ct) is { } row?Results.Accepted("/api/v1/plugins/deliveries",row):Results.NotFound();
@@ -60,17 +60,19 @@ RETURNING id,plugin_key,display_name,status,endpoint_url,secret_ref,subscribed_e
         });
         group.MapGet("/quality/evaluations/{id:guid}/notes",async(Guid id,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
+            if(user.IsInRole("platform_admin"))return Results.Forbid();
             await using var connection=await store.Open(ct);
             await using var command=new NpgsqlCommand(@"SELECT n.id,n.note_type,n.body,u.display_name author_name,n.created_at FROM quality_evaluation_notes n JOIN users u ON u.id=n.author_user_id WHERE n.tenant_id=$1 AND n.evaluation_id=$2 ORDER BY n.created_at",connection);
             Add(command,Tenant(user),id);return Results.Ok(await Rows(command,ct));
         });
         group.MapPost("/quality/evaluations/{id:guid}/state",async(Guid id,QualityStateChange body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
-            if(!Admin(user)||!Regex.IsMatch(body.State??"","^(draft|submitted|disputed|final)$"))return Results.BadRequest(new{error="Invalid evaluation state"});
+            if(user.IsInRole("platform_admin"))return Results.Forbid();if(!Admin(user)||!Regex.IsMatch(body.State??"","^(draft|submitted|disputed|final)$"))return Results.BadRequest(new{error="Invalid evaluation state"});
             await using var connection=await store.Open(ct);await using var command=new NpgsqlCommand("UPDATE quality_evaluations SET state=$3,updated_at=now() WHERE id=$2 AND tenant_id=$1 RETURNING id,state,updated_at",connection);Add(command,Tenant(user),id,body.State);return await One(command,ct) is { } row?Results.Ok(row):Results.NotFound();
         });
         group.MapPost("/quality/evaluations/{id:guid}/notes",async(Guid id,QualityNoteCreate body,ClaimsPrincipal user,PlatformStore store,CancellationToken ct)=>
         {
+            if(user.IsInRole("platform_admin"))return Results.Forbid();
             if(!Regex.IsMatch(body.NoteType??"","^(review|dispute|resolution|compliance)$")||string.IsNullOrWhiteSpace(body.Body)||body.Body.Length>5000)return Results.BadRequest(new{error="Invalid quality note"});
             await using var connection=await store.Open(ct);
             await using var command=new NpgsqlCommand("INSERT INTO quality_evaluation_notes(tenant_id,evaluation_id,author_user_id,note_type,body) SELECT $1,id,$3,$4,$5 FROM quality_evaluations WHERE id=$2 AND tenant_id=$1 RETURNING id,note_type,body,created_at",connection);

@@ -16,7 +16,7 @@ public static class UserEndpoints
 {
     static Guid User(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub")!);
     static Guid Tenant(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue("tenant_id") ?? throw new UnauthorizedAccessException("Tenant required"));
-    static bool Admin(ClaimsPrincipal user) => user.IsInRole("platform_admin") || user.IsInRole("tenant_owner") || user.IsInRole("tenant_admin");
+    static bool Admin(ClaimsPrincipal user) => user.IsInRole("tenant_owner") || user.IsInRole("tenant_admin");
     static readonly HashSet<string> AllowedRoles = ["tenant_owner", "tenant_admin", "supervisor", "agent", "auditor", "billing_admin"];
 
     public static void MapUsers(this WebApplication app)

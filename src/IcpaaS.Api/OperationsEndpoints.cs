@@ -60,15 +60,15 @@ public static class OperationsEndpoints
         });
         api.MapPost("/quality/scorecards",async(ScorecardCreate b,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {
-            if(!Admin(u))return Results.Forbid();await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("INSERT INTO quality_scorecards(tenant_id,name,version,definition) VALUES($1,$2,$3,$4::jsonb) RETURNING id,name,version,status",c);Add(q,Tenant(u),b.Name,b.Version,b.Definition.GetRawText());return Results.Created("/api/v1/quality/scorecards",await One(q,ct));
+            if(!Admin(u)||u.IsInRole("platform_admin"))return Results.Forbid();await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("INSERT INTO quality_scorecards(tenant_id,name,version,definition) VALUES($1,$2,$3,$4::jsonb) RETURNING id,name,version,status",c);Add(q,Tenant(u),b.Name,b.Version,b.Definition.GetRawText());return Results.Created("/api/v1/quality/scorecards",await One(q,ct));
         });
         api.MapPost("/quality/evaluations",async(EvaluationCreate b,ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {
-            await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("INSERT INTO quality_evaluations(tenant_id,call_id,scorecard_id,reviewer_user_id,score,result) SELECT $1,$2,$3,$4,$5,$6::jsonb WHERE EXISTS(SELECT 1 FROM calls WHERE id=$2 AND tenant_id=$1) RETURNING id,state,score,created_at",c);Add(q,Tenant(u),b.CallId,b.ScorecardId,User(u),b.Score,b.Result.GetRawText());return Results.Created("/api/v1/quality/evaluations",await One(q,ct));
+            if(u.IsInRole("platform_admin"))return Results.Forbid();await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("INSERT INTO quality_evaluations(tenant_id,call_id,scorecard_id,reviewer_user_id,score,result) SELECT $1,$2,$3,$4,$5,$6::jsonb WHERE EXISTS(SELECT 1 FROM calls WHERE id=$2 AND tenant_id=$1) RETURNING id,state,score,created_at",c);Add(q,Tenant(u),b.CallId,b.ScorecardId,User(u),b.Score,b.Result.GetRawText());return Results.Created("/api/v1/quality/evaluations",await One(q,ct));
         });
         api.MapGet("/audit",async(ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {
-            if(!Admin(u)&&!u.IsInRole("auditor"))return Results.Forbid();await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("SELECT id,event_type,resource_type,resource_id,correlation_id,occurred_at,integrity_hash FROM audit_events WHERE tenant_id=$1 ORDER BY occurred_at DESC LIMIT 500",c);q.Parameters.AddWithValue(Tenant(u));return Results.Ok(await Rows(q,ct));
+            if(u.IsInRole("platform_admin")||!Admin(u)&&!u.IsInRole("auditor"))return Results.Forbid();await using var c=await s.Open(ct);await using var q=new NpgsqlCommand("SELECT id,event_type,resource_type,resource_id,correlation_id,occurred_at,integrity_hash FROM audit_events WHERE tenant_id=$1 ORDER BY occurred_at DESC LIMIT 500",c);q.Parameters.AddWithValue(Tenant(u));return Results.Ok(await Rows(q,ct));
         });
         api.MapGet("/operations",async(ClaimsPrincipal u,PlatformStore s,CancellationToken ct)=>
         {

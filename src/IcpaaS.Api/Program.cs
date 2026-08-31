@@ -44,7 +44,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
-app.UseExceptionHandler();
+app.UseExceptionHandler(handler=>handler.Run(ApiExceptionHandler.Write));
 app.UseDefaultFiles();
 app.Use(async (context, next) =>
 {
